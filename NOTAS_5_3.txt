@@ -1,0 +1,1 @@
+RotorMind 5.3 — Área Estudos independente: sessões cronometradas, histórico e progresso por manual, plano de revisão permanece na aba Estudos. Dados de consultas e biblioteca não são apagados. Sem testes Safari reais. Não mede cobertura de páginas nem comprova domínio técnico.

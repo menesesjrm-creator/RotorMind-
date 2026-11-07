@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V5.2 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V5.3 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -287,8 +287,22 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
           <h3>Tópicos estudados</h3>
           <div class="doc-list" id="topic-list"><div class="empty">Nenhuma pergunta registrada ainda. Use a aba Consulta.</div></div>
         </div>
+        <div class="card" id="rm-study-workspace">
+          <h3>Academia · Sessões de estudo</h3>
+          <p style="color:var(--dim);font-size:13px;line-height:1.6">Estude aqui, sem abrir ou substituir a Consulta. O progresso registra sessões reais, não presume que o manual foi totalmente coberto.</p>
+          <div class="field-row">
+            <div class="field"><label>Manual ou tema</label><select id="rm-study-manual"><option value="MGO">MGO — Manual Geral de Operações</option><option value="OMB">OMB — Manual de Operações Parte B</option><option value="AW139 RFM">AW139 RFM</option><option value="S-92">S-92</option><option value="Outro">Outro tema</option></select></div>
+            <div class="field"><label>Duração planejada</label><select id="rm-study-duration"><option value="15">15 minutos</option><option value="20" selected>20 minutos</option><option value="30">30 minutos</option><option value="45">45 minutos</option></select></div>
+          </div>
+          <div class="field-row single"><div class="field"><label>Capítulo ou objetivo</label><input id="rm-study-objective" placeholder="Ex.: mínimos operacionais, radar, procedimentos" maxlength="180"></div></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"><button class="btn" id="rm-study-start">▶ Iniciar sessão</button><button class="btn" id="rm-study-finish" disabled>✓ Concluir e registrar</button><button class="btn" id="rm-study-cancel" disabled>Cancelar</button></div>
+          <div id="rm-study-session-status" style="padding-top:12px;font-size:13px;color:var(--dim)" aria-live="polite">Nenhuma sessão ativa.</div>
+          <div id="rm-study-guidance" style="margin-top:12px;line-height:1.6"></div>
+        </div>
+        <div class="card"><h3>Progresso registrado</h3><div id="rm-study-progress"></div></div>
+        <div class="card"><h3>Histórico de sessões</h3><div id="rm-study-sessions"></div></div>
         <div class="card">
-          <h3>Plano de estudo</h3>
+          <h3>Sugestões de revisão</h3>
           <p id="t-suggestion" style="font-size:12.5px;color:var(--dim);line-height:1.6;margin:0;">Sem dados suficientes ainda.</p>
         </div>
       </div>
@@ -954,6 +968,7 @@ async function setFeedback(eventId, value){
 
 async function renderTraining(){
   const log = await getStudyLog();
+  await rmRenderStudySessions();
   document.getElementById('t-total').textContent = log.length;
   document.getElementById('t-last').textContent = log.length ? new Date(log[log.length-1].ts).toLocaleString('pt-BR') : '—';
 
@@ -1023,15 +1038,13 @@ async function renderTraining(){
 }
 
 function goStudyTopic(topic){
-  const promptText = `Quero revisar ${topic.title}${topic.category ? ' ('+topic.category+')' : ''}. Pode me dar um resumo rápido dos pontos principais e depois me testar com uma pergunta?`;
-  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  const talkBtn = document.querySelector('nav button[data-view="talk"]');
-  talkBtn.classList.add('active');
-  document.getElementById('view-talk').classList.add('active');
-  chatInput.value = promptText;
-  chatInput.style.height='auto'; chatInput.style.height=Math.min(chatInput.scrollHeight,110)+'px';
-  chatInput.focus();
+  rmOpen('training');
+  const name=topic.title||'Outro';
+  const sel=document.getElementById('rm-study-manual');
+  const matching=[...sel.options].find(o=>name.toLowerCase().includes(o.value.toLowerCase()) || o.value.toLowerCase().includes(name.toLowerCase()));
+  sel.value=matching?matching.value:'Outro';
+  document.getElementById('rm-study-objective').value=name;
+  document.getElementById('rm-study-workspace').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 /* ---------------- nav ---------------- */
@@ -1950,11 +1963,11 @@ async function generateReportFromRequest(rawRequest){
     const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,650)}`).join('\n\n');
     // 5.0: não consumir o orçamento de saída com raciocínio interno do modelo.
     // O fallback usa um esquema mínimo, uma seção por chamada, com diagnóstico real.
-    const attempts=[{bullets:3,limit:4096},{bullets:2,limit:4096}];
+    const attempts=[{bullets:3,limit:2048},{bullets:2,limit:2048},{bullets:1,limit:2048}];
     let last;
     const models=(await rmAvailableGeminiModels(apiKey)).slice(0,5);
     for(const attempt of attempts){
-      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Produza ${attempt.bullets} parágrafos explicativos densos (70 a 110 palavras por parágrafo), em português claro para piloto de helicóptero. Cada parágrafo deve explicar COMO funciona, POR QUE importa e QUAL a diferença operacional entre os equipamentos, sem copiar frases inteiras das fontes. Explique controles, configuração e limitações apenas se as fontes sustentarem. Cite [F1], [F2] etc junto de cada afirmação técnica. Não invente números, funções ou configurações. Se só um equipamento estiver documentado, declare explicitamente a lacuna; não force simetria. Não repita o título do tema dentro das seções. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
+      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Produza ${attempt.bullets} observações técnicas concisas com referência [F1], [F2] etc em cada uma. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
       for(const model of models){
         try{
           const config={maxOutputTokens:attempt.limit,responseMimeType:'application/json',temperature:0.1,thinkingConfig:{thinkingBudget:0}};
@@ -2148,7 +2161,7 @@ function renderReport(){
         <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;">
           ${(sec.bullets||[]).map(b=>`<li>${escapeHtml(b)}</li>`).join('')}
         </ul>
-        
+        ${pageImages&&pageImages.length?(()=>{const pi=pageImages[idx%pageImages.length];return `<div style="display:grid;grid-template-columns:minmax(130px,240px) 1fr;gap:14px;align-items:center;margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;"><img src="${pi.dataUrl}" alt="Figura da fonte" style="width:100%;max-height:240px;object-fit:contain;background:white;border-radius:5px;cursor:zoom-in" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-size:12px;line-height:1.6"><b>Fonte visual para conferir</b><div>${escapeHtml(pi.docTitle)} · Rev. ${escapeHtml(pi.revision)} · PDF pág. ${pi.page}</div><small>Imagem original; a relação com esta seção exige conferência. Toque para ampliar.</small></div></div>`;})():''}
       </div>`).join('')}
     <div class="card">
       <h3>Fontes</h3>
@@ -2205,9 +2218,43 @@ function exportReportPDF(){
       }
     }
     y += 4;
-
+    const images=currentReport.pageImages||[];
+    if(images.length){
+      const pi=images[(currentReport.parsed.secoes||[]).indexOf(sec)%images.length];
+      try{
+        const props=doc.getImageProperties(pi.dataUrl);
+        const w=Math.min(115,maxW), h=Math.min(105,w*props.height/props.width);
+        if(y+h+16>280){doc.addPage();y=20;}
+        doc.addImage(pi.dataUrl,marginL,y,w,h);y+=h+5;
+        doc.setFontSize(8);doc.setTextColor(95);
+        const caption=doc.splitTextToSize('Fonte visual para conferir: '+pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,maxW);
+        doc.text(caption,marginL,y);y+=caption.length*4+7;doc.setTextColor(0);
+      }catch(e){console.warn('Imagem da seção não incorporada',e);}
+    }
   }
 
+  if(currentReport.pageImages && currentReport.pageImages.length>0){
+    for(const pi of currentReport.pageImages){
+      doc.addPage(); y=18;
+      doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text('Página original do manual (verifique a fonte)', marginL, y); y+=9;
+      try{
+        const props=doc.getImageProperties(pi.dataUrl);
+        const usableH=242;
+        const ratio=Math.min(maxW/props.width,usableH/props.height);
+        const imgW=props.width*ratio, imgH=props.height*ratio;
+        doc.addImage(pi.dataUrl, marginL+(maxW-imgW)/2, y, imgW, imgH);
+        y+=imgH+7;
+        doc.setFontSize(8.5); doc.setFont(undefined,'normal'); doc.setTextColor(90);
+        const caption=doc.splitTextToSize(`${pi.docTitle} · Rev. ${pi.revision||'não informada'} · PDF pág. ${pi.page}`,maxW);
+        doc.text(caption,marginL,y); y+=caption.length*5+5;
+        doc.setTextColor(0);
+      }catch(e){ console.error('Falha ao embutir página do manual no PDF:', e); }
+    }
+  }
+
+  if(y>255){ doc.addPage(); y=20; }
+  doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text('Fontes', marginL, y); y += 7;
+  doc.setFont(undefined,'normal'); doc.setFontSize(8.5);
   const srcSet = [...new Map(currentReport.hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
   for(const h of srcSet){
     if(y>288){ doc.addPage(); y=20; }
@@ -2235,9 +2282,20 @@ function exportReportPPTX(){
     const slide = pptx.addSlide();
     slide.background = { color: '12171C' };
     slide.addText(sec.heading || '', { x:0.5, y:0.35, w:9, h:0.7, fontSize:22, bold:true, color:'4FA8E0' });
-    const bulletText=(sec.bullets||[]).map(b=>({text:b,options:{bullet:true,breakLine:true}}));
-    slide.addText(bulletText,{x:0.55,y:1.15,w:8.9,h:4.05,fontSize:12,color:'E4E7EA',valign:'top',breakLine:false});
+    const images=currentReport.pageImages||[];
+    const pi=images.length?images[(currentReport.parsed.secoes||[]).indexOf(sec)%images.length]:null;
+    const bulletText=(sec.bullets||[]).map(b=>({text:b.slice(0,340),options:{bullet:true,breakLine:true}}));
+    slide.addText(bulletText,{x:0.55,y:1.15,w:pi?5.4:8.9,h:4.05,fontSize:pi?11:13,color:'E4E7EA',valign:'top',breakLine:false});
+    if(pi){try{slide.addImage({data:pi.dataUrl,x:6.2,y:1.15,w:3.2,h:3.55,sizing:{type:'contain',w:3.2,h:3.55}});slide.addText(pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,{x:6.2,y:4.78,w:3.2,h:0.45,fontSize:8,color:'9FAEBA'});}catch(e){console.warn('Falha imagem PPTX',e);}}
+  }
 
+  if(currentReport.pageImages && currentReport.pageImages.length>0){
+    for(const pi of currentReport.pageImages){
+      const slide = pptx.addSlide();
+      slide.background = { color: '0A0D10' };
+      slide.addImage({ data: pi.dataUrl, x:0.8, y:0.4, w:8.4, h:4.4, sizing:{type:'contain', w:8.4, h:4.4} });
+      slide.addText(`${pi.docTitle} · Rev. ${pi.revision||'não informada'} · PDF pág. ${pi.page}`, { x:0.5, y:5.0, w:9, h:0.4, fontSize:11, color:'8B95A1', align:'center' });
+    }
   }
 
   const srcSet = [...new Map(currentReport.hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
@@ -2840,36 +2898,6 @@ document.getElementById('v2-create').addEventListener('click',async()=>{
 </style>
 <script>
 const rmSelectedFigures=new Map();
-async function rmCropFigure(key,f){
- const source=new Image();source.src=f.image;
- await new Promise((resolve,reject)=>{if(source.complete&&source.naturalWidth)return resolve();source.onload=resolve;source.onerror=reject;});
- const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:#060d16ef;overflow:auto;padding:18px;color:#fff';
- const panel=document.createElement('div');panel.style.cssText='max-width:850px;margin:auto;background:#152536;border:1px solid #37506a;border-radius:14px;padding:18px';
- const heading=document.createElement('h3');heading.textContent='Recortar figura do manual — '+f.title+' · pág. '+f.page;
- const help=document.createElement('p');help.textContent='Ajuste as margens da página. O recorte é feito somente no iPad, sem enviar imagens à IA. Confira se legendas e números permanecem legíveis.';
- const preview=document.createElement('canvas');preview.style.cssText='display:block;max-width:100%;max-height:52vh;margin:12px auto;background:white';
- const sliders={};const controls=document.createElement('div');controls.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px';
- for(const [name,start] of [['Esquerda',0],['Topo',0],['Direita',100],['Base',100]]){
-  const box=document.createElement('label');box.textContent=name+' ';
-  const range=document.createElement('input');range.type='range';range.min=0;range.max=100;range.value=start;range.style.width='100%';sliders[name]=range;box.appendChild(range);controls.appendChild(box);
-  range.oninput=draw;
- }
- function draw(){
-  const l=+sliders.Esquerda.value,t=+sliders.Topo.value,r=+sliders.Direita.value,b=+sliders.Base.value;
-  if(r<=l+3||b<=t+3)return;
-  const sx=Math.round(source.naturalWidth*l/100),sy=Math.round(source.naturalHeight*t/100);
-  const sw=Math.round(source.naturalWidth*(r-l)/100),sh=Math.round(source.naturalHeight*(b-t)/100);
-  preview.width=sw;preview.height=sh;preview.getContext('2d').drawImage(source,sx,sy,sw,sh,0,0,sw,sh);
- }
- const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-top:12px';
- const save=document.createElement('button');save.className='btn';save.textContent='Usar este recorte';save.onclick=()=>{
-  const l=+sliders.Esquerda.value,t=+sliders.Topo.value,r=+sliders.Direita.value,b=+sliders.Base.value;
-  if(r<=l+3||b<=t+3){alert('Área de recorte inválida');return;}
-  f.image=preview.toDataURL('image/jpeg',0.88);f.cropped=true;overlay.remove();rmRenderSelectedFigures();
- };
- const cancel=document.createElement('button');cancel.className='btn';cancel.textContent='Cancelar';cancel.onclick=()=>overlay.remove();
- actions.append(save,cancel);panel.append(heading,help,controls,preview,actions);overlay.append(panel);document.body.append(overlay);draw();
-}
 function rmRenderSelectedFigures(){
  const target=document.getElementById('rm-figure-list');if(!target)return;
  target.replaceChildren();
@@ -2878,10 +2906,8 @@ function rmRenderSelectedFigures(){
  for(const [key,f] of rmSelectedFigures){const c=document.createElement('div');c.className='rm-figure-card';const img=document.createElement('img');img.src=f.image;img.alt='Página '+f.page+' do documento '+f.title;
  const label=document.createElement('small');label.textContent=f.title+' · Rev. '+f.revision+' · p. '+f.page;
  const open=document.createElement('button');open.className='btn';open.textContent='Abrir PDF';open.onclick=()=>openPdfViewer(f.docId,f.page);
- const crop=document.createElement('button');crop.className='btn';crop.textContent='Recortar figura';
- crop.onclick=()=>rmCropFigure(key,f);
  const remove=document.createElement('button');remove.className='btn';remove.textContent='Remover';remove.onclick=()=>{rmSelectedFigures.delete(key);rmRenderSelectedFigures();};
- c.append(img,label,open,crop,remove);grid.appendChild(c);}
+ c.append(img,label,open,remove);grid.appendChild(c);}
  target.appendChild(grid);
 }
 document.getElementById('rm-clear-figures').addEventListener('click',()=>{rmSelectedFigures.clear();rmRenderSelectedFigures();});
@@ -2976,6 +3002,49 @@ window.addEventListener('DOMContentLoaded',()=>{
   if(!controlled){const row=document.createElement('div');row.textContent='Se acabou de instalar, atualize a página depois de carregar pelo HTTPS.';out.appendChild(row)}
  }
  b?.addEventListener('click',check);check();
+})();
+
+/* RotorMind 5.3: independent study workspace. Existing study-log and chat are untouched. */
+const RM_SESSIONS_KEY='rm-study-sessions-v53';
+let rmActiveStudy=null;
+async function rmGetSessions(){const v=await kvGet(RM_SESSIONS_KEY);return Array.isArray(v)?v:[];}
+function rmElapsedMinutes(st){return Math.max(0,Math.round((Date.now()-st.startedMs)/60000));}
+function rmStudyStatus(){
+ const el=document.getElementById('rm-study-session-status');if(!el)return;
+ if(!rmActiveStudy){el.textContent='Nenhuma sessão ativa.';return;}
+ const mins=rmElapsedMinutes(rmActiveStudy);
+ el.textContent=`Sessão em andamento: ${rmActiveStudy.manual} · ${mins} min decorridos / ${rmActiveStudy.duration} min planejados. Continue lendo o manual; conclua quando terminar.`;
+}
+async function rmRenderStudySessions(){
+ const sessions=await rmGetSessions();
+ const hist=document.getElementById('rm-study-sessions');const progress=document.getElementById('rm-study-progress');if(!hist||!progress)return;
+ const totals={};let sum=0;
+ for(const x of sessions){if(!totals[x.manual])totals[x.manual]={minutes:0,count:0,objectives:new Set()};totals[x.manual].minutes+=x.minutes;totals[x.manual].count++;if(x.objective)totals[x.manual].objectives.add(x.objective);sum+=x.minutes;}
+ progress.innerHTML=`<div class="status-row"><span>Tempo de estudo registrado</span><strong>${sum} min</strong></div><div class="status-row"><span>Sessões concluídas</span><strong>${sessions.length}</strong></div>`+Object.entries(totals).map(([name,t])=>`<div class="doc-item"><div class="doc-meta"><div class="doc-title">${escapeHtml(name)}</div><div class="doc-sub">${t.minutes} min · ${t.count} sessões · ${t.objectives.size} objetivos distintos registrados</div></div></div>`).join('')+'<p style="color:var(--dim);font-size:12px">Tempo e objetivos registrados não representam percentual de páginas ou domínio do manual. A cobertura só poderá ser medida com capítulos/páginas vinculados às sessões.</p>';
+ hist.innerHTML=sessions.length?[...sessions].reverse().slice(0,40).map(x=>`<div class="doc-item"><div class="doc-meta"><div class="doc-title">${escapeHtml(x.manual)} · ${x.minutes} min</div><div class="doc-sub">${new Date(x.ended).toLocaleString('pt-BR')} · ${escapeHtml(x.objective||'Sem objetivo especificado')}</div></div></div>`).join(''):'<div class="empty">Nenhuma sessão concluída. Inicie uma atividade acima.</div>';
+ rmStudyStatus();
+}
+(function rmInitStudy(){
+ const start=document.getElementById('rm-study-start'),finish=document.getElementById('rm-study-finish'),cancel=document.getElementById('rm-study-cancel');if(!start)return;
+ function buttons(active){start.disabled=active;finish.disabled=!active;cancel.disabled=!active;}
+ start.addEventListener('click',()=>{
+  const manual=document.getElementById('rm-study-manual').value;
+  const duration=Number(document.getElementById('rm-study-duration').value);
+  const objective=document.getElementById('rm-study-objective').value.trim();
+  rmActiveStudy={manual,duration,objective,startedMs:Date.now()};buttons(true);rmStudyStatus();
+  const guide=document.getElementById('rm-study-guidance');
+  guide.innerHTML=`<div class="card"><b>Roteiro de estudo — ${escapeHtml(manual)}</b><p>1. Localize o capítulo relevante no manual da Biblioteca.<br>2. Identifique conceitos, limitações e procedimentos importantes.<br>3. Anote dúvidas e compare as referências diretamente nas fontes.<br>4. Ao terminar, registre a sessão. A duração é uma meta, não uma comprovação de leitura.</p><p style="color:var(--dim);font-size:12px">Objetivo: ${escapeHtml(objective||'Revisão livre')}. Este roteiro não substitui o manual nem altera sua Consulta.</p></div>`;
+ });
+ finish.addEventListener('click',async()=>{
+  if(!rmActiveStudy)return;
+  const elapsed=rmElapsedMinutes(rmActiveStudy);
+  const minutes=Math.min(rmActiveStudy.duration,elapsed);
+  if(minutes<1){await showAlert('Para registrar estudo real, permaneça ao menos um minuto na sessão.');return;}
+  const sessions=await rmGetSessions();sessions.push({id:'ss_'+Date.now(),manual:rmActiveStudy.manual,objective:rmActiveStudy.objective,minutes,planned:rmActiveStudy.duration,started:new Date(rmActiveStudy.startedMs).toISOString(),ended:new Date().toISOString()});
+  await kvSet(RM_SESSIONS_KEY,sessions.slice(-1000));rmActiveStudy=null;buttons(false);document.getElementById('rm-study-guidance').innerHTML='';await rmRenderStudySessions();
+ });
+ cancel.addEventListener('click',()=>{rmActiveStudy=null;buttons(false);document.getElementById('rm-study-guidance').innerHTML='';rmStudyStatus();});
+ setInterval(rmStudyStatus,30000);
 })();
 </script>
 </body>
