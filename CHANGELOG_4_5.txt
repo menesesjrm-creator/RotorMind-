@@ -1,0 +1,1 @@
+RotorMind 4.5 Beta: recuperação de respostas truncadas no Estúdio. Duas tentativas automáticas com contexto e saída progressivamente menores. Se ambas falharem por truncamento ou JSON inválido, exibe extratos documentais com citações explícitas, sem inventar síntese. Mantém imagens e histórico existentes. Não testado no Safari/iPad.
