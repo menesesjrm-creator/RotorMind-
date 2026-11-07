@@ -1,0 +1,2785 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>RotorMind 2.9 — Aviation Intelligence</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RotorMind">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0A0D10">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script type="module">
+  try{
+    const webllm = await import("https://esm.sh/@mlc-ai/web-llm");
+    window.__webllm = webllm;
+  }catch(e){
+    console.warn('WebLLM não carregou:', e);
+    window.__webllmLoadError = e;
+  }
+</script>
+<script>
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(console.warn));
+}
+</script>
+<style>
+  @font-face { font-family: 'sysmono'; src: local('SF Mono'), local('Menlo'), local('Consolas'); }
+  :root{
+    --bg:#0A0D10; --panel:#12171C; --panel2:#171E25; --border:#232B33; --border-soft:#1A2129;
+    --text:#E4E7EA; --dim:#8B95A1; --dim2:#5C6670;
+    --blue:#4FA8E0; --green:#35C480; --amber:#F2A93B; --red:#E5484D;
+    --accent-bg:#173049; --accent-border:#1F4566;
+    --sources-bg:#0E1B26; --sources-border:#163247;
+    --mono:'IBM Plex Mono','SF Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;
+  }
+  body.light-theme{
+    --bg:#F2F4F7; --panel:#FFFFFF; --panel2:#EDF0F4; --border:#DCE1E7; --border-soft:#E7EAEE;
+    --text:#1A2229; --dim:#5A6472; --dim2:#8B95A1;
+    --blue:#1E6FBF; --green:#188A50; --amber:#B8720A; --red:#C93A3A;
+    --accent-bg:#DEEBFA; --accent-border:#B7D7F2;
+    --sources-bg:#E9F2FB; --sources-border:#CBE1F5;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--panel);flex-shrink:0;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand-mark{width:28px;height:28px;border-radius:6px;background:linear-gradient(180deg,#1B2530,#0E1318);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--blue);font-weight:600;}
+  .brand-text{font-size:14px;font-weight:600;letter-spacing:.2px;}
+  .brand-sub{font-family:var(--mono);font-size:10px;color:var(--dim2);letter-spacing:.5px;}
+
+  nav{display:flex;gap:2px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;}
+  nav button{background:none;border:none;color:var(--dim);font-family:var(--sans);font-size:13px;padding:12px 14px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+  nav button.active{color:var(--text);border-bottom-color:var(--blue);}
+  nav button .soon{font-size:9px;color:var(--dim2);margin-left:5px;font-family:var(--mono);}
+
+  main{flex:1;overflow:hidden;position:relative;}
+  .view{display:none;height:100%;overflow-y:auto;}
+  .view.active{display:flex;flex-direction:column;}
+
+  /* ---------- MANUALS ---------- */
+  .manuals-wrap{padding:16px;max-width:760px;margin:0 auto;width:100%;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;}
+  .card h3{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+  .field-row.single{grid-template-columns:1fr;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:11px;color:var(--dim2);}
+  .field input,.field select{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:6px;font-size:13px;font-family:var(--sans);}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--blue);}
+  .dropzone{border:1.5px dashed var(--border);border-radius:8px;padding:22px;text-align:center;cursor:pointer;color:var(--dim);font-size:13px;margin-top:6px;transition:border-color .15s;}
+  .dropzone:hover{border-color:var(--blue);color:var(--text);}
+  .dropzone.busy{border-color:var(--amber);color:var(--amber);cursor:default;}
+  .btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:9px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-family:var(--sans);}
+  .btn:hover{border-color:var(--dim);}
+  .btn-primary{background:var(--accent-bg);border-color:var(--accent-border);color:var(--blue);}
+  .btn-primary:hover{border-color:var(--blue);}
+  .btn-danger{color:var(--red);}
+  .btn:disabled{opacity:.4;cursor:default;}
+
+  .doc-list{display:flex;flex-direction:column;gap:8px;}
+  .doc-item{display:flex;justify-content:space-between;align-items:center;background:var(--panel2);border:1px solid var(--border-soft);border-radius:8px;padding:10px 12px;}
+  .topic-clickable:active{background:#1C2530;}
+  .plan-item:active{background:var(--panel2);}
+  .doc-meta{display:flex;flex-direction:column;gap:2px;}
+  .doc-title{font-size:13px;font-weight:500;}
+  .doc-sub{font-family:var(--mono);font-size:10.5px;color:var(--dim2);}
+  .doc-tag{font-family:var(--mono);font-size:9.5px;padding:2px 6px;border-radius:4px;background:#12281B;color:var(--green);border:1px solid #1E3D28;}
+  .empty{color:var(--dim2);font-size:12.5px;text-align:center;padding:22px 10px;}
+
+  /* ---------- TALK ---------- */
+  .chat-view{height:100%;display:flex;flex-direction:column;}
+  .chat-scroll{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;max-width:760px;margin:0 auto;width:100%;}
+  .msg{display:flex;flex-direction:column;gap:4px;max-width:88%;}
+  .msg.user{align-self:flex-end;align-items:flex-end;}
+  .msg.assistant{align-self:flex-start;align-items:flex-start;}
+  .bubble{padding:10px 13px;border-radius:10px;font-size:13.5px;line-height:1.55;}
+  .msg.user .bubble{background:var(--accent-bg);border:1px solid var(--accent-border);white-space:pre-wrap;}
+  .msg.assistant .bubble{background:var(--panel);border:1px solid var(--border);}
+  .msg.assistant .bubble p{margin:0 0 8px;} .msg.assistant .bubble p:last-child{margin-bottom:0;}
+  .msg.assistant .bubble ul,.msg.assistant .bubble ol{margin:4px 0 8px;padding-left:20px;}
+  .msg.assistant .bubble li{margin-bottom:3px;}
+  .msg.assistant .bubble li::marker{color:var(--blue);}
+  .msg.assistant .bubble h1,.msg.assistant .bubble h2{font-size:14.5px;margin:12px 0 7px;color:var(--blue);font-weight:700;text-decoration:underline;text-decoration-color:#2A5578;text-underline-offset:3px;letter-spacing:.2px;}
+  .msg.assistant .bubble h1:first-child,.msg.assistant .bubble h2:first-child{margin-top:0;}
+  .msg.assistant .bubble h3{font-size:13px;margin:10px 0 5px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
+  .msg.assistant .bubble strong{color:var(--green);font-weight:700;}
+  .msg.assistant .bubble em{color:var(--dim);font-style:italic;}
+  .msg.assistant .bubble hr{border:none;border-top:1px solid var(--border);margin:12px 0;}
+  .msg.assistant .bubble code{background:var(--panel2);padding:1px 4px;border-radius:4px;font-family:var(--mono);font-size:12px;color:#E8B04A;}
+  .sources{font-family:var(--mono);font-size:10.5px;color:var(--blue);background:var(--sources-bg);border:1px solid var(--sources-border);border-radius:6px;padding:7px 10px;margin-top:2px;}
+  .src-link{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;}
+  .src-link:active{opacity:.6;}
+  .feedback-row{display:flex;gap:6px;margin-top:2px;}
+  .fb-btn{background:var(--panel2);border:1px solid var(--border);color:var(--dim);font-size:11px;padding:5px 9px;border-radius:6px;cursor:pointer;}
+  .fb-btn.fb-selected{color:var(--text);border-color:var(--blue);background:var(--accent-bg);}
+  .sources .src-title{color:var(--dim);margin-bottom:3px;}
+  .thinking{font-family:var(--mono);font-size:11px;color:var(--dim2);padding:4px 2px;}
+  .chat-empty{margin:auto;text-align:center;color:var(--dim2);font-size:13px;padding:30px;}
+  .chat-input-bar{border-top:1px solid var(--border);background:var(--panel);padding:10px 14px calc(10px + env(safe-area-inset-bottom));flex-shrink:0;}
+  .chat-input-row{display:flex;gap:8px;max-width:760px;margin:0 auto;}
+  .chat-input-row textarea{flex:1;resize:none;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-family:var(--sans);font-size:13.5px;line-height:1.4;max-height:110px;}
+  .chat-input-row textarea:focus{outline:none;border-color:var(--blue);}
+  #chat-preview{padding:9px 10px;font-size:12px;white-space:nowrap;flex-shrink:0;}
+  #chat-attach-btn{padding:9px 11px;font-size:14px;flex-shrink:0;}
+  .attach-chip{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11.5px;color:var(--dim);}
+  .attach-chip img{height:32px;width:32px;object-fit:cover;border-radius:4px;}
+  .attach-chip button{background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;margin-left:auto;}
+  .disclaimer{max-width:760px;margin:6px auto 0;font-size:10px;color:var(--dim2);text-align:center;letter-spacing:.2px;}
+
+  /* ---------- SETTINGS ---------- */
+  .settings-wrap{padding:16px;max-width:760px;margin:0 auto;width:100%;}
+  .status-row{display:flex;justify-content:space-between;font-size:12.5px;padding:8px 0;border-bottom:1px solid var(--border-soft);}
+  .status-row span:first-child{color:var(--dim);}
+
+  ::-webkit-scrollbar{width:8px;} ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+#v2-aircraft-bar .v2-air.active{background:var(--accent-bg);border-color:var(--blue);color:var(--blue)}
+@media(max-width:550px){nav{padding:0 4px}nav button{padding:11px 10px;font-size:12px}.field-row{grid-template-columns:1fr}}
+
+/* RotorMind 2.2 · simplified iPad-first shell */
+:root{--bg:#0b1420;--panel:#101e2c;--panel2:#17293a;--border:#263c50;--border-soft:#1b3143;--blue:#60b9f4;--accent-bg:#18364c;--text:#edf5fa;--dim:#9fb4c4}
+.brand-mark{width:37px;height:37px;border-radius:11px;background:#193b55;font-size:22px;font-family:var(--sans);font-weight:800}
+.brand-text{font-size:18px;letter-spacing:-.5px}.brand-sub{font-size:9px;letter-spacing:1.3px}
+.rm-settings{background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:19px;cursor:pointer}
+nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px;font-size:13px;font-weight:600}nav button.rm-hidden-nav{display:none}
+#v2-aircraft-bar{justify-content:center}
+.rm-home{width:min(860px,100%);margin:auto;padding:clamp(20px,5vw,48px) 18px;overflow-y:auto}
+.rm-eyebrow{font-size:10px;letter-spacing:2px;color:var(--blue);font-weight:700}
+.rm-home h1{font-size:clamp(25px,4vw,35px);letter-spacing:-.8px;margin:10px 0 7px}
+.rm-lead{font-size:14px;color:var(--dim);line-height:1.6;margin:0 0 23px}
+.rm-ask{background:var(--panel);border:1px solid #31536b;border-radius:16px;padding:14px;box-shadow:0 12px 30px #0002}
+.rm-ask textarea{width:100%;resize:vertical;min-height:85px;background:transparent;border:0;outline:none;color:var(--text);font:15px var(--sans);line-height:1.5}
+.rm-ask-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.rm-ask-foot span{font-size:11px;color:var(--dim)}
+.rm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-top:21px}
+.rm-tile{text-align:left;display:flex;flex-direction:column;gap:7px;padding:20px;border:1px solid var(--border);border-radius:15px;background:var(--panel);color:var(--text);cursor:pointer;font-family:var(--sans)}
+.rm-tile span{font-size:24px;color:var(--blue)}.rm-tile strong{font-size:15px}.rm-tile small{font-size:12px;color:var(--dim)}.rm-tile:hover{border-color:var(--blue)}
+.rm-privacy{margin-top:24px;color:var(--dim2);font-size:11px;line-height:1.5}
+@media(min-width:900px){.manuals-wrap,.settings-wrap{max-width:1040px}.rm-home{padding-top:60px}}
+@media(max-width:480px){.rm-grid{gap:9px}.rm-tile{padding:14px}.rm-ask-foot span{max-width:150px}nav button{padding:13px 3px;font-size:12px}#v2-aircraft-bar{justify-content:flex-start}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="brand-mark">R</div>
+      <div>
+        <div class="brand-text">RotorMind</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V2.2</div>
+      </div>
+    </div>
+    <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
+  </header>
+
+  <nav aria-label="Navegação principal">
+    <button data-view="home" class="active">⌂ Início</button>
+    <button data-view="manuals">▤ Biblioteca</button>
+    <button data-view="reports">▣ Estúdio</button>
+    <button data-view="training">◈ Estudos</button>
+    <button data-view="talk" class="rm-hidden-nav">Assistente</button>
+    <button data-view="simulator" class="rm-hidden-nav">Cenários</button>
+    <button data-view="settings" class="rm-hidden-nav">Ajustes</button>
+  </nav>
+
+  <div id="v2-aircraft-bar" role="group" aria-label="Área técnica" style="display:flex;gap:7px;align-items:center;overflow-x:auto;padding:9px 14px;background:var(--bg);border-bottom:1px solid var(--border);">
+<span style="font-size:11px;color:var(--dim);white-space:nowrap">ÁREA TÉCNICA</span>
+<button class="btn v2-air" data-air="ALL" style="padding:6px 10px">Todos</button>
+<button class="btn v2-air active" data-air="AW139" style="padding:6px 10px">AW139</button>
+<button class="btn v2-air" data-air="S-92" style="padding:6px 10px">S-92</button>
+<button class="btn v2-air" data-air="GERAL" style="padding:6px 10px">Operações gerais</button>
+</div><main>
+    <div class="view active" id="view-home">
+      <div class="rm-home">
+        <div class="rm-eyebrow">SEU ESPAÇO DE ESTUDO</div>
+        <h1>O que vamos estudar?</h1>
+        <p class="rm-lead">Pergunte sobre seus manuais, encontre uma fonte ou crie material de estudo.</p>
+        <div class="rm-ask">
+          <textarea id="rm-home-query" rows="3" placeholder="Ex.: Explique o sistema hidráulico e mostre as fontes do manual..."></textarea>
+          <div class="rm-ask-foot"><span>◈ Respostas com fontes verificáveis</span><button class="btn btn-primary" id="rm-home-send">Consultar →</button></div>
+        </div>
+        <div class="rm-grid">
+          <button class="rm-tile" data-rm-target="manuals"><span>▤</span><strong>Biblioteca</strong><small>Manuais e revisões</small></button>
+          <button class="rm-tile" data-rm-target="reports"><span>▣</span><strong>Criar aula</strong><small>Resumos e slides</small></button>
+          <button class="rm-tile" data-rm-target="training"><span>◈</span><strong>Meus estudos</strong><small>Questões e progresso</small></button>
+          <button class="rm-tile" data-rm-target="simulator"><span>◇</span><strong>Cenários</strong><small>Treinamento interativo</small></button>
+        </div>
+        <p class="rm-privacy">Os documentos importados permanecem no armazenamento do navegador. Confira o modo de IA em Ajustes antes de consultar conteúdo restrito.</p>
+      </div>
+    </div>
+    <!-- MANUALS -->
+    <div class="view" id="view-manuals">
+      <div class="manuals-wrap">
+        <div class="card">
+          <h3>Adicionar manual</h3>
+          <div class="field-row">
+            <div class="field"><label>Aeronave</label>
+              <select id="f-aircraft"><option>AW139</option><option>S-92</option><option>Operações gerais</option><option>Outra</option></select>
+            </div>
+            <div class="field"><label>Categoria</label>
+              <select id="f-category"><option>Operations Manual</option><option>RFM/AFM</option><option>Emergency Checklist</option><option>SOP</option><option>Sistemas</option><option>Regulamentos</option><option>Manutenção</option><option>Treinamento</option><option>Outro</option></select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Título do documento</label><input id="f-title" placeholder="ex: AW139 OMB"></div>
+            <div class="field"><label>Fabricante / Empresa</label><input id="f-company" placeholder="ex: Leonardo / CHC do Brasil"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Revisão</label><input id="f-revision" placeholder="ex: Rev. 24"></div>
+            <div class="field"><label>Data da revisão</label><input id="f-date" type="date"></div>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--dim);margin:8px 0 4px;">
+            <input type="checkbox" id="f-keep-pdf" checked> Guardar o PDF completo (permite extrair imagens de páginas depois — ocupa bem mais espaço)
+          </label>
+          <div class="dropzone" id="dropzone">Toque para selecionar um PDF, ou arraste aqui<br><span style="font-size:11px;">extração de texto + indexação por página</span></div>
+          <input type="file" id="file-input" accept="application/pdf" style="display:none">
+        </div>
+
+        <div class="card">
+          <h3>Biblioteca (<span id="doc-count">0</span>)</h3>
+          <div class="doc-list" id="doc-list"><div class="empty">Nenhum manual adicionado ainda.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TALK -->
+    <div class="view" id="view-talk">
+      <div class="chat-view">
+        <div style="display:flex;justify-content:flex-end;padding:6px 14px;border-bottom:1px solid var(--border-soft);">
+          <button class="btn" id="chat-history-btn" style="padding:5px 10px;font-size:11px;">🕘 Histórico</button>
+        </div>
+        <div class="chat-scroll" id="chat-scroll">
+          <div class="chat-empty" id="chat-empty">Adicione um manual em <b>Manuals</b> e pergunte algo aqui.<br>Toda resposta técnica vem com a fonte citada.<br><br>Também dá pra pedir "resumo de...", "powerpoint com imagem sobre..." ou "pdf com..." — tudo aqui mesmo.</div>
+        </div>
+        <div class="chat-input-bar">
+          <div id="chat-attach-preview" style="display:none;max-width:760px;margin:0 auto 6px;"></div>
+          <div class="chat-input-row">
+            <button class="btn" id="chat-attach-btn" title="Anexar arquivo ou imagem">📎</button>
+            <input type="file" id="chat-attach-input" accept="application/pdf,image/*" style="display:none">
+            <textarea id="chat-input" rows="1" placeholder="Pergunte sobre um sistema, limitação ou procedimento..."></textarea>
+            <button class="btn" id="chat-preview" title="Ver trechos encontrados, sem gastar API">🔍 Trechos</button>
+            <button class="btn btn-primary" id="chat-send">Enviar</button>
+          </div>
+          <div class="disclaimer">FOR TRAINING AND STUDY PURPOSES ONLY. ALWAYS FOLLOW THE CURRENT APPROVED OPERATIONAL DOCUMENTATION.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRAINING -->
+    <div class="view" id="view-training">
+      <div class="manuals-wrap">
+        <div class="card">
+          <h3>Resumo de estudo</h3>
+          <div class="status-row"><span>Perguntas feitas</span><span id="t-total">0</span></div>
+          <div class="status-row"><span>Última sessão</span><span id="t-last">—</span></div>
+        </div>
+        <div class="card">
+          <h3>Tópicos estudados</h3>
+          <div class="doc-list" id="topic-list"><div class="empty">Nenhuma pergunta registrada ainda. Use a aba Consulta.</div></div>
+        </div>
+        <div class="card">
+          <h3>Plano de estudo</h3>
+          <p id="t-suggestion" style="font-size:12.5px;color:var(--dim);line-height:1.6;margin:0;">Sem dados suficientes ainda.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIMULATOR -->
+    <div class="view" id="view-simulator">
+      <div class="chat-view">
+        <div id="sim-setup" class="manuals-wrap">
+          <div class="card">
+            <h3>Cenário de Simulador</h3>
+            <p style="font-size:12px;color:var(--dim);line-height:1.6;margin:0 0 12px;">
+            A IA vai apresentar uma situação progressivamente e perguntar suas prioridades antes de revelar o desfecho — método socrático, sem entregar a resposta de cara. Usa os manuais da biblioteca quando relevante.
+            </p>
+            <div class="field-row">
+              <div class="field"><label>Aeronave</label>
+                <select id="sim-aircraft"><option>AW139</option><option>S-92</option></select>
+              </div>
+              <div class="field"><label>Dificuldade</label>
+                <select id="sim-difficulty"><option>Iniciante</option><option selected>Intermediário</option><option>Avançado</option></select>
+              </div>
+            </div>
+            <div class="field-row single">
+              <div class="field"><label>Tipo de cenário</label>
+                <select id="sim-type">
+                  <option>Night Offshore Approach</option>
+                  <option>Engine Fire Warning</option>
+                  <option>Hydraulic System Failure</option>
+                  <option>Deteriorating Weather / IIMC</option>
+                  <option>Ditching Preparation</option>
+                  <option>Outro (descrever abaixo)</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row single">
+              <div class="field"><label>Descrição livre (opcional, ou obrigatório se "Outro")</label>
+                <input id="sim-custom" placeholder="ex: falha de AFCS em aproximação IFR">
+              </div>
+            </div>
+            <button class="btn btn-primary" id="sim-start" style="width:100%;margin-top:6px;">Iniciar cenário</button>
+          </div>
+        </div>
+        <div class="chat-scroll" id="sim-scroll" style="display:none;"></div>
+        <div class="chat-input-bar" id="sim-input-bar" style="display:none;">
+          <div class="chat-input-row">
+            <textarea id="sim-input" rows="1" placeholder="O que você faz / responde?"></textarea>
+            <button class="btn btn-primary" id="sim-send">Enviar</button>
+          </div>
+          <div style="max-width:760px;margin:6px auto 0;text-align:center;">
+            <button class="btn btn-danger" id="sim-end" style="font-size:11px;padding:5px 10px;">Encerrar cenário</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="view" id="view-reports">
+      <div class="manuals-wrap" id="report-history-wrap">
+<div class="card" id="v2-studio" style="border-color:var(--accent-border)">
+<h3>Estúdio de aulas e apresentações</h3>
+<p style="font-size:12px;color:var(--dim);line-height:1.5">Crie material com referências e imagens das páginas disponíveis. Revise o conteúdo antes de compartilhar. A geração estruturada atual usa Gemini e requer autorização para qualquer envio externo.</p>
+<div class="field-row single"><div class="field"><label>Tema específico</label><input id="v2-topic" placeholder="Ex.: sistema hidráulico, AFCS, MGB"></div></div>
+<div class="field-row"><div class="field"><label>Formato</label><select id="v2-format"><option value="pdf">Resumo PDF</option><option value="pptx">Apresentação PowerPoint</option><option value="lesson">Aula estruturada</option></select></div><div class="field"><label>Imagens</label><select id="v2-images"><option value="yes">Páginas dos manuais</option><option value="no">Somente texto</option></select></div></div>
+<button class="btn" id="v21-preview" style="width:100%;margin-bottom:8px">🔎 Ver fontes antes de criar (100% local)</button>
+<button class="btn btn-primary" id="v2-create" style="width:100%">Preparar conteúdo</button>
+<div id="v21-sources" style="margin-top:10px"></div><div class="rm-figures"><h3>Imagens selecionadas</h3><p class="rm-muted">Depois de conferir as fontes, escolha páginas para usar como referência visual. As imagens não são enviadas automaticamente à IA.</p><div id="rm-figure-list"></div><button class="btn" id="rm-clear-figures" type="button">Limpar seleção</button></div>
+<div id="v2-studio-msg" style="font-size:11px;color:var(--dim);margin-top:8px"></div>
+</div>
+        <div class="card">
+          <h3>Resumos gerados</h3>
+          <p style="font-size:12px;color:var(--dim);line-height:1.6;margin:0;">
+          Peça resumos, PDF ou PowerPoint direto na aba <b>Consulta</b> — ex: "gerar um powerpoint sobre motor do AW139". Tudo que for gerado aparece aqui, pra você abrir ou baixar de novo quando quiser.
+          </p>
+        </div>
+        <div class="doc-list" id="report-history-list"><div class="empty">Nenhum resumo gerado ainda. Peça na aba Consulta.</div></div>
+      </div>
+      <div class="manuals-wrap" id="report-result" style="display:none;"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="view" id="view-settings">
+      <div class="settings-wrap"><div class="card" id="rm-release-card" style="margin-bottom:12px">
+<h3>Instalação e segurança · RotorMind 3.0</h3>
+<p style="font-size:12px;color:var(--dim);line-height:1.6">Instale somente pelo Safari em um endereço HTTPS estável. Os PDFs ficam no armazenamento local deste endereço. Faça backup antes de trocar de endereço, dispositivo ou reinstalar.</p>
+<div id="rm-release-checks" style="font-size:12px;line-height:1.9" aria-live="polite"></div>
+<button class="btn" id="rm-release-check" type="button">Verificar instalação</button>
+</div><div class="card" id="rm-backup-card">
+<h3>Biblioteca privada • Backup e restauração</h3>
+<p style="font-size:12px;color:var(--dim);line-height:1.6">O backup inclui PDFs, textos indexados, estudos e configurações, mas <b>não inclui a chave da IA</b>. O arquivo não é criptografado: guarde-o em local seguro. Restaurar adiciona/substitui registros com as mesmas chaves, sem apagar os demais.</p>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0"><button class="btn btn-primary" id="rm-backup-export">Exportar biblioteca</button><button class="btn" id="rm-backup-import">Restaurar backup</button><input id="rm-backup-file" type="file" accept="application/json,.json" hidden></div>
+<div id="rm-storage-health" style="font-size:12px;color:var(--dim);margin-bottom:8px">Armazenamento: verificando...</div>
+<div class="card" style="margin:12px 0;padding:12px"><b>Preparação para uso offline</b><p style="font-size:12px;color:var(--dim)">Com internet, salve as bibliotecas de PDF e exportação para consultas posteriores sem rede. A IA Gemini e o modelo WebLLM não ficam disponíveis offline por esta operação. O cache pode ser removido pelo iPadOS.</p><button class="btn" id="rm-offline-prep" type="button">Preparar bibliotecas offline</button> <button class="btn" id="rm-offline-check" type="button">Verificar offline</button><pre id="rm-offline-status" style="white-space:pre-wrap;font-size:12px;line-height:1.6;max-height:200px;overflow:auto" aria-live="polite"></pre></div>
+<div class="card" style="margin:12px 0;padding:12px"><b>Diagnóstico da biblioteca</b><p style="font-size:12px;color:var(--dim)">Verifique PDFs guardados, páginas indexadas e limites de operação antes de depender de uma resposta.</p><button class="btn" id="rm-diagnostics-run" type="button">Verificar biblioteca</button><pre id="rm-diagnostics-output" style="white-space:pre-wrap;font-size:12px;line-height:1.6;max-height:250px;overflow:auto"></pre></div>
+<div id="rm-backup-status" style="font-size:12px;color:var(--dim)" aria-live="polite">Recomendação: exporte o backup antes de atualizar ou trocar de dispositivo.</div>
+</div>
+        <div class="card">
+          <h3>Aparência</h3>
+          <div style="display:flex;gap:8px;">
+            <label style="display:flex;gap:8px;align-items:center;font-size:13px;flex:1;">
+              <input type="radio" name="ui-theme" value="dark" id="theme-dark"> 🌙 Escuro
+            </label>
+            <label style="display:flex;gap:8px;align-items:center;font-size:13px;flex:1;">
+              <input type="radio" name="ui-theme" value="light" id="theme-light"> ☀️ Claro
+            </label>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Motor de IA</h3>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <label style="display:flex;gap:8px;align-items:center;font-size:13px;">
+              <input type="radio" name="ai-engine" value="gemini" id="engine-gemini"> Gemini (ENVIA dados ao Google; exige autorização para documentos internos)
+            </label>
+            <label style="display:flex;gap:8px;align-items:center;font-size:13px;">
+              <input type="radio" name="ai-engine" value="local" id="engine-local"> Modelo local no aparelho (prioridade privacidade; depende de WebGPU e do hardware)
+            </label>
+          </div>
+          <div id="local-engine-panel" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-soft);">
+            <p style="font-size:12px;color:var(--dim);line-height:1.6;margin:0 0 10px;">
+            Roda o modelo <b>Llama 3.2 1B</b> direto no navegador via WebGPU. Precisa baixar ~700MB na primeira vez (fica em cache depois).
+            Requer um navegador com suporte a WebGPU — pode não funcionar dentro de apps como o GoodReader; se falhar, tente abrir o arquivo direto no Safari/Chrome.
+            </p>
+            <button class="btn btn-primary" id="btn-load-local">Baixar e carregar modelo local</button>
+            <div id="local-load-status" style="font-size:11.5px;color:var(--dim2);margin-top:8px;"></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Aviation English Coach</h3>
+          <p style="font-size:12px;color:var(--dim);line-height:1.6;margin:0 0 10px;">
+          Se ativado, sempre que você escrever em inglês em Consulta ou Simulator, a IA corrige naturalmente erros de gramática e vocabulário aeronáutico dentro da própria resposta — sem interromper o fluxo, sem precisar pedir.
+          </p>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;">
+            <input type="checkbox" id="english-coach-toggle"> Ativar correção automática de inglês
+          </label>
+        </div>
+        <div class="card">
+          <h3>Chave da API Google Gemini (gratuita)</h3>
+          <p style="font-size:12px;color:var(--dim);line-height:1.6;margin:0 0 10px;">
+          Necessária pro motor Gemini. Fica salva só neste dispositivo (IndexedDB local) e é enviada apenas para generativelanguage.googleapis.com.
+          Gere grátis, sem cartão, em <span style="color:var(--blue);">aistudio.google.com/apikey</span> → entrar com conta Google → "Create API key".
+          </p>
+          <div class="field-row single">
+            <div class="field"><label>API Key</label><input type="password" id="f-apikey" placeholder="AIza..."></div>
+          </div>
+          <button class="btn btn-primary" id="btn-savekey" style="margin-top:8px;">Salvar chave</button>
+          <span id="key-status" style="font-size:11.5px;color:var(--dim2);margin-left:10px;"></span>
+        </div>
+        <div class="card">
+          <h3>Status</h3>
+          <div class="status-row"><span>Manuais indexados</span><span id="s-doccount">0</span></div>
+          <div class="status-row"><span>Blocos de texto indexados</span><span id="s-chunkcount">0</span></div>
+          <div class="status-row"><span>Modo de recuperação</span><span>Busca local por termos</span></div>
+          <div class="status-row"><span>Modelo</span><span>Configurável: local ou Gemini</span></div>
+        </div>
+        <div class="card">
+          <h3>Dados</h3>
+          <p style="font-size:12px;color:var(--dim);line-height:1.6;margin:0 0 10px;">
+          Cada versão nova do arquivo pode não enxergar a biblioteca da versão anterior. Exporte antes de trocar de arquivo, e importe na nova versão — evita ter que subir os PDFs de novo.
+          </p>
+          <button class="btn btn-primary" id="btn-export" style="width:100%;margin-bottom:8px;">⬇️ Exportar biblioteca</button>
+          <button class="btn" id="btn-import" style="width:100%;margin-bottom:8px;">⬆️ Importar biblioteca</button>
+          <input type="file" id="import-file-input" accept="application/json" style="display:none">
+          <div id="import-status" style="font-size:11.5px;color:var(--dim2);margin-bottom:10px;"></div>
+          <button class="btn btn-danger" id="btn-wipe" style="width:100%;">Apagar toda a biblioteca</button>
+        </div>
+        <div class="card">
+          <h3>Sobre esta fase</h3>
+          <p style="font-size:12.5px;color:var(--dim);line-height:1.6;margin:0;">
+          Fase 1: biblioteca de manuais, chat com citação de fonte garantida pelo app (não depende do modelo formatar certo).
+          Fase 2: memória de estudo (aba Training) registrando toda pergunta feita e sugerindo o que revisar, e comparação de revisões (botão 🔄 em Manuals) com classificação de severidade e confirmação manual obrigatória pra mudanças 🔴 críticas.
+          Recuperação por palavra-chave local — sem embeddings/backend nesta versão de protótipo.
+          Dados salvos localmente no navegador (IndexedDB) — trocar de aparelho ou limpar dados do navegador apaga tudo.
+          Comparação de revisões (Fase 2 avançada).
+          Fase 3: motor de IA local opcional (offline, mais fraco) — voz foi removida, uso é só por escrita.
+          Fase 4: Simulador com cenários dinâmicos, método socrático, sem entregar a resposta antes do piloto decidir.
+          </p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+async function initPdfWorker(){
+  try{
+    const resp = await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js');
+    if(!resp.ok) throw new Error('worker fetch status ' + resp.status);
+    const code = await resp.text();
+    const blob = new Blob([code], {type:'application/javascript'});
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  }catch(e){
+    console.warn('Falha ao carregar pdf.worker via blob, usando fallback direto:', e);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+}
+const pdfWorkerReady = initPdfWorker();
+
+/* AVIATOR AI PRIVACIDADE: autorização explícita por sessão para envio ao Gemini.
+   Protege também comparação de revisões, imagens e geração de relatórios. */
+const aviatorOriginalFetch = window.fetch.bind(window);
+let aviatorCloudAuthorized = false;
+window.fetch = async function(input, init){
+  const url = typeof input === 'string' ? input : (input && input.url) || '';
+  if(/^https:\/\/generativelanguage\.googleapis\.com\//i.test(url) && !aviatorCloudAuthorized){
+    const ok = window.confirm('PRIVACIDADE DOS MANUAIS\n\nEsta operação enviará perguntas, trechos dos manuais ou anexos para o Google Gemini. NÃO autorize documentos internos/confidenciais sem permissão da empresa.\n\nAutorizar envios ao Gemini durante esta sessão?');
+    if(!ok) throw new Error('Envio externo cancelado. Selecione IA local em Settings.');
+    aviatorCloudAuthorized = true;
+  }
+  return aviatorOriginalFetch(input, init);
+};
+
+/* ---------------- storage (IndexedDB) ---------------- */
+const DB_NAME = 'aviator_ai_db', DB_VERSION = 1, STORE = 'kv';
+function openDb(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = ()=>{ req.result.createObjectStore(STORE); };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+let dbPromise = openDb();
+async function kvGet(key){
+  const db = await dbPromise;
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(STORE,'readonly').objectStore(STORE).get(key);
+    tx.onsuccess = ()=>resolve(tx.result);
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+async function kvSet(key, value){
+  const db = await dbPromise;
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(STORE,'readwrite').objectStore(STORE).put(value, key);
+    tx.onsuccess = ()=>resolve(true);
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+async function kvDelete(key){
+  const db = await dbPromise;
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(STORE,'readwrite').objectStore(STORE).delete(key);
+    tx.onsuccess = ()=>resolve(true);
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+
+async function getIndex(){ const v = await kvGet('documents-index'); return v || []; }
+async function setIndex(idx){ await kvSet('documents-index', idx); }
+const aviatorChunkCache = new Map();
+async function getChunks(docId){
+  if(aviatorChunkCache.has(docId)) return aviatorChunkCache.get(docId);
+  const v = (await kvGet('doc-chunks:'+docId)) || [];
+  aviatorChunkCache.set(docId, v);
+  return v;
+}
+async function setChunks(docId, chunks){ await kvSet('doc-chunks:'+docId, chunks); aviatorChunkCache.set(docId, chunks); if(typeof aviatorSearchTokenCache !== 'undefined') aviatorSearchTokenCache.delete(docId); }
+async function deleteDoc(docId){ aviatorChunkCache.delete(docId); if(typeof aviatorSearchTokenCache !== 'undefined') aviatorSearchTokenCache.delete(docId); try{ await kvDelete('doc-chunks:'+docId); }catch(e){} try{ await kvDelete('pdf-blob:'+docId); }catch(e){} }
+async function setPdfBlob(docId, blob){ await kvSet('pdf-blob:'+docId, blob); }
+async function getPdfBlob(docId){ try{ return await kvGet('pdf-blob:'+docId); }catch(e){ return null; } }
+
+const pageImageCache = new Map(); // 'docId:page' -> dataURL, dura a sessão
+const pdfDocCache = new Map(); // docId -> pdf.js document proxy, dura a sessão
+async function getLoadedPdf(docId){
+  let pdf = pdfDocCache.get(docId);
+  if(!pdf){
+    const blob = await getPdfBlob(docId);
+    if(!blob) return null;
+    await pdfWorkerReady;
+    const buf = await blob.arrayBuffer();
+    pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    pdfDocCache.set(docId, pdf);
+  }
+  return pdf;
+}
+
+async function pageHasImageOps(pdf, pageNum){
+  if(pageNum < 1 || pageNum > pdf.numPages) return false;
+  try{
+    const page = await pdf.getPage(pageNum);
+    const ops = await page.getOperatorList();
+    // foto/imagem raster embutida
+    const hasRaster = ops.fnArray.some(fn =>
+      fn === pdfjsLib.OPS.paintImageXObject ||
+      fn === pdfjsLib.OPS.paintJpegXObject ||
+      fn === pdfjsLib.OPS.paintImageXObjectRepeat
+    );
+    if(hasRaster) return true;
+    // diagrama desenhado em vetor (linhas/formas) — comum em manual técnico
+    let graphicOps = 0;
+    for(const fn of ops.fnArray){
+      if(fn === pdfjsLib.OPS.constructPath || fn === pdfjsLib.OPS.fill ||
+         fn === pdfjsLib.OPS.eoFill || fn === pdfjsLib.OPS.stroke ||
+         fn === pdfjsLib.OPS.fillStroke){
+        graphicOps++;
+      }
+    }
+    return graphicOps > 40;
+  }catch(e){ return false; }
+}
+
+// se a página que bateu na busca é só texto, procura nas vizinhas (±1, ±2)
+// uma página que realmente tenha um desenho/diagrama embutido
+async function findBestImagePage(docId, pageNum){
+  const pdf = await getLoadedPdf(docId);
+  if(!pdf) return pageNum;
+  if(await pageHasImageOps(pdf, pageNum)) return pageNum;
+  for(const delta of [1, -1, 2, -2, 3, -3]){
+    const p = pageNum + delta;
+    if(await pageHasImageOps(pdf, p)) return p;
+  }
+  return pageNum;
+}
+
+async function renderPdfPageDataUrl(docId, pageNum){
+  const cacheKey = docId+':'+pageNum;
+  if(pageImageCache.has(cacheKey)) return pageImageCache.get(cacheKey);
+  let pdf = pdfDocCache.get(docId);
+  if(!pdf){
+    const blob = await getPdfBlob(docId);
+    if(!blob) return null;
+    await pdfWorkerReady;
+    const buf = await blob.arrayBuffer();
+    pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    pdfDocCache.set(docId, pdf);
+  }
+  if(pageNum < 1 || pageNum > pdf.numPages) return null;
+  const page = await pdf.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 1.4 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const dataUrl = canvas.toDataURL('image/png');
+  // Limit decoded page images to protect iPad memory.
+  if(pageImageCache.size >= 12) pageImageCache.delete(pageImageCache.keys().next().value);
+  pageImageCache.set(cacheKey, dataUrl);
+  return dataUrl;
+}
+async function docHasPdfBlob(docId){ return !!(await getPdfBlob(docId)); }
+
+async function openPdfViewer(docId, targetPage){
+  const idx = await getIndex();
+  const doc = idx.find(d=>d.id===docId);
+  if(!doc) return;
+  await pdfWorkerReady;
+  const blob = await getPdfBlob(docId);
+  if(!blob){ await showAlert('Este manual não tem o PDF guardado.'); return; }
+  const buf = await blob.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const totalPages = pdf.numPages;
+
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:#05070A;z-index:90;display:flex;flex-direction:column;';
+  ov.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--panel);gap:10px;">
+      <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(doc.title)}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--dim2);">pág.</span>
+        <input type="number" id="pdfview-page-input" value="1" min="1" max="${totalPages}" style="width:56px;text-align:center;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px;font-size:12px;">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--dim2);">/ ${totalPages}</span>
+        <button class="btn" id="pdfview-close" style="padding:5px 12px;font-size:12px;">← Voltar</button>
+      </div>
+    </div>
+    <div id="pdfview-body" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;align-items:center;gap:14px;"></div>
+  `;
+  document.body.appendChild(ov);
+  document.getElementById('pdfview-close').addEventListener('click', ()=> { observer.disconnect(); ov.querySelectorAll('canvas').forEach(c=>{c.width=0;c.height=0;}); ov.remove(); });
+  const body = document.getElementById('pdfview-body');
+
+  // uma div-placeholder por página; renderiza de verdade só quando entra na tela (rolagem contínua, sem travar com manuais grandes)
+  const pageEls = [];
+  for(let p=1; p<=totalPages; p++){
+    const holder = document.createElement('div');
+    holder.dataset.page = p;
+    holder.style.cssText = 'width:100%;max-width:700px;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+    holder.innerHTML = `<div style="font-family:var(--mono);font-size:11px;color:var(--dim2);">pág. ${p}</div>`;
+    body.appendChild(holder);
+    pageEls.push(holder);
+  }
+
+  // Render only nearby pages and release canvases outside the visible region.
+  // A full 500-page PDF otherwise exhausts Safari/iPad graphics memory.
+  const rendered = new Set();
+  const rendering = new Set();
+  const MAX_RENDERED = 8;
+  function releaseDistantPages(current){
+    if(rendered.size <= MAX_RENDERED) return;
+    const candidates = [...rendered].sort((a,b)=>Math.abs(b-current)-Math.abs(a-current));
+    for(const oldPage of candidates){
+      if(rendered.size <= MAX_RENDERED) break;
+      if(Math.abs(oldPage-current) <= 2) continue;
+      const old = pageEls[oldPage-1];
+      old.querySelectorAll('canvas').forEach(c=>{c.width=0;c.height=0;c.remove();});
+      old.textContent = 'pág. '+oldPage;
+      rendered.delete(oldPage);
+    }
+  }
+  async function renderInto(holder, p){
+    if(rendered.has(p) || rendering.has(p)) return;
+    rendering.add(p);
+    const pdfPage = await pdf.getPage(p);
+    const viewport = pdfPage.getViewport({ scale: 1.4 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    canvas.style.cssText = 'max-width:100%;height:auto;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.4);';
+    try{ await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise; }
+    catch(err){ rendering.delete(p); console.warn('Falha ao renderizar página',p,err); return; }
+    if(!holder.isConnected){ rendering.delete(p); canvas.width=0; canvas.height=0; return; }
+    holder.innerHTML = '';
+    holder.appendChild(canvas);
+    const cap = document.createElement('div');
+    cap.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--dim2);margin-top:4px;';
+    cap.textContent = `pág. ${p} / ${totalPages}`;
+    holder.appendChild(cap);
+    rendering.delete(p); rendered.add(p); releaseDistantPages(p);
+  }
+
+  const observer = new IntersectionObserver((entries)=>{
+    for(const entry of entries){
+      if(entry.isIntersecting){
+        const p = parseInt(entry.target.dataset.page, 10);
+        renderInto(entry.target, p);
+      }
+    }
+  }, { root: body, rootMargin: '600px 0px 600px 0px' });
+  pageEls.forEach(el => observer.observe(el));
+
+  document.getElementById('pdfview-page-input').addEventListener('change', (e)=>{
+    let p = parseInt(e.target.value, 10);
+    if(isNaN(p)) p = 1;
+    p = Math.max(1, Math.min(totalPages, p));
+    pageEls[p-1].scrollIntoView({ behavior:'smooth', block:'start' });
+  });
+
+  if(targetPage && targetPage>=1 && targetPage<=totalPages){
+    document.getElementById('pdfview-page-input').value = targetPage;
+    // dá um instante pro layout assentar antes de pular direto pra página pedida
+    setTimeout(()=>{ pageEls[targetPage-1].scrollIntoView({ behavior:'auto', block:'start' }); }, 30);
+  }
+}
+
+function wireSourceClicks(container){
+  if(!container) return;
+  container.querySelectorAll('.src-link').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      const docId = el.dataset.doc, page = parseInt(el.dataset.page, 10);
+      if(await docHasPdfBlob(docId)){
+        openPdfViewer(docId, page);
+      }else{
+        await showAlert('Este manual não tem o PDF guardado, então não dá pra abrir a página em imagem. Vá em Manuals, remova e re-suba ele marcando "Guardar o PDF completo".');
+      }
+    });
+  });
+}
+
+function openImageLightbox(dataUrl, caption){
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(3,4,5,.96);z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML = `
+    <img src="${dataUrl}" style="max-width:100%;max-height:80vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);">
+    <div style="font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:14px;text-align:center;">${escapeHtml(caption||'')}</div>
+    <button class="btn" style="margin-top:16px;padding:8px 20px;">← Voltar</button>
+  `;
+  ov.addEventListener('click', (e)=>{ if(e.target===ov || e.target.tagName==='BUTTON') ov.remove(); });
+  document.body.appendChild(ov);
+}
+
+async function appendPageImages(bubbleWrapEl, hits, wantsRealDiagram){
+  if(!bubbleWrapEl || !hits || hits.length===0) return;
+  const uniquePages = [...new Map(hits.map(h => [h.doc.id+':'+h.chunk.page, h])).values()];
+  const withImages = [];
+  for(const h of uniquePages){
+    if(await docHasPdfBlob(h.doc.id)) withImages.push(h);
+  }
+  if(withImages.length===0) return;
+  const container = document.createElement('div');
+  container.style.cssText = 'display:flex;gap:10px;margin-top:10px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;';
+  bubbleWrapEl.appendChild(container);
+  const seenPages = new Set();
+  for(const h of withImages){
+    let pageToShow = h.chunk.page;
+    if(wantsRealDiagram){ pageToShow = await findBestImagePage(h.doc.id, h.chunk.page); }
+    const pageKey = h.doc.id+':'+pageToShow;
+    if(seenPages.has(pageKey)) continue;
+    seenPages.add(pageKey);
+    const dataUrl = await renderPdfPageDataUrl(h.doc.id, pageToShow);
+    if(!dataUrl) continue;
+    const caption = `${h.doc.title} · pág. ${pageToShow}` + (pageToShow!==h.chunk.page ? ' (ajustado)' : '');
+    const fig = document.createElement('div');
+    fig.style.cssText = 'flex-shrink:0;width:180px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.25);transition:transform .15s;';
+    fig.innerHTML = `<img src="${dataUrl}" style="width:100%;height:130px;object-fit:cover;display:block;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--mono);font-size:9.5px;color:var(--dim);padding:6px 8px;line-height:1.4;">${escapeHtml(caption)}</div>`;
+    fig.addEventListener('click', ()=> openImageLightbox(dataUrl, caption));
+    fig.addEventListener('touchstart', ()=>{ fig.style.transform='scale(0.97)'; }, {passive:true});
+    fig.addEventListener('touchend', ()=>{ fig.style.transform='scale(1)'; }, {passive:true});
+    container.appendChild(fig);
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+  }
+}
+
+async function getApiKey(){ return (await kvGet('api-key')) || ''; }
+async function setApiKey(k){ await kvSet('api-key', k); }
+async function getEngine(){ return (await kvGet('ai-engine')) || 'local'; }
+async function setEngine(v){ await kvSet('ai-engine', v); }
+async function getEnglishCoach(){ return !!(await kvGet('english-coach')); }
+async function setEnglishCoach(v){ await kvSet('english-coach', v); }
+
+/* ---------------- local model (WebLLM) ---------------- */
+const LOCAL_MODEL_ID = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+let localEngine = null;
+let localEngineLoading = null;
+
+async function ensureLocalEngine(onProgress){
+  if(localEngine) return localEngine;
+  if(localEngineLoading) return localEngineLoading;
+  if(!navigator.gpu){
+    throw new Error('Este navegador não expõe WebGPU. Comum em webviews de apps (ex: GoodReader) — tente abrir o arquivo direto no Safari ou Chrome.');
+  }
+  if(!window.__webllm){
+    throw new Error('Biblioteca do modelo local não carregou (precisa de internet na primeira vez, mesmo pro modo "offline"). ' + (window.__webllmLoadError ? String(window.__webllmLoadError.message||window.__webllmLoadError) : ''));
+  }
+  localEngineLoading = window.__webllm.CreateMLCEngine(LOCAL_MODEL_ID, {
+    initProgressCallback: (report)=>{ if(onProgress) onProgress(report.text || ''); }
+  }).then(engine => { localEngine = engine; localEngineLoading = null; return engine; })
+    .catch(err => { localEngineLoading = null; throw err; });
+  return localEngineLoading;
+}
+
+async function generateLocal(systemPrompt, historyMessages){
+  const engine = await ensureLocalEngine();
+  const messages = [{role:'system', content: systemPrompt}, ...historyMessages.map(m=>({role: m.role==='assistant'?'assistant':'user', content: m.content}))];
+  const reply = await engine.chat.completions.create({ messages, temperature:0.4, max_tokens:700 });
+  return reply.choices[0].message.content;
+}
+
+/* engine selector UI wiring */
+(async function initThemeUI(){
+  const theme = (await kvGet('ui-theme')) || 'dark';
+  document.body.classList.toggle('light-theme', theme === 'light');
+  document.getElementById(theme==='light' ? 'theme-light' : 'theme-dark').checked = true;
+})();
+document.querySelectorAll('input[name="ui-theme"]').forEach(r=>{
+  r.addEventListener('change', async ()=>{
+    await kvSet('ui-theme', r.value);
+    document.body.classList.toggle('light-theme', r.value === 'light');
+  });
+});
+
+(async function initEngineUI(){
+  const current = await getEngine();
+  document.getElementById(current==='local' ? 'engine-local' : 'engine-gemini').checked = true;
+  document.getElementById('local-engine-panel').style.display = current==='local' ? 'block' : 'none';
+  document.getElementById('english-coach-toggle').checked = await getEnglishCoach();
+})();
+document.getElementById('english-coach-toggle').addEventListener('change', (e)=>{ setEnglishCoach(e.target.checked); });
+document.querySelectorAll('input[name="ai-engine"]').forEach(r=>{
+  r.addEventListener('change', async ()=>{
+    await setEngine(r.value);
+    document.getElementById('local-engine-panel').style.display = r.value==='local' ? 'block' : 'none';
+  });
+});
+document.getElementById('btn-load-local').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('local-load-status');
+  const btn = document.getElementById('btn-load-local');
+  btn.disabled = true;
+  statusEl.textContent = 'Iniciando...';
+  try{
+    await ensureLocalEngine((text)=>{ statusEl.textContent = text; });
+    statusEl.innerHTML = '<span style="color:var(--green);">Modelo carregado e pronto.</span>';
+  }catch(err){
+    statusEl.innerHTML = '<span style="color:var(--red);">Falha: ' + escapeHtml(err.message||String(err)) + '</span>';
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+/* ---------------- study memory (Fase 2) ---------------- */
+const STUDY_LOG_CAP = 500;
+async function getStudyLog(){ return (await kvGet('study-log')) || []; }
+
+async function openSearchHistory(){
+  const log = await getStudyLog();
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(5,7,9,.92);z-index:80;overflow-y:auto;padding:16px;';
+  const list = [...log].reverse().slice(0, 100);
+  ov.innerHTML = `<div style="max-width:760px;margin:0 auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:14px;">Histórico de pesquisas</h3>
+      <button class="btn" id="history-close">← Voltar</button>
+    </div>
+    <div id="history-list"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('history-close').addEventListener('click', ()=> ov.remove());
+
+  const listEl = document.getElementById('history-list');
+  if(list.length===0){
+    listEl.innerHTML = '<div class="empty">Nenhuma pesquisa ainda.</div>';
+    return;
+  }
+  listEl.innerHTML = list.map((entry, i)=>{
+    const topics = (entry.topics||[]).map(t=>t.title).filter((v,idx,arr)=>arr.indexOf(v)===idx).join(', ');
+    return `<div class="doc-item" data-hist-idx="${i}" style="cursor:pointer;">
+      <div class="doc-meta">
+        <div class="doc-title">${escapeHtml(entry.question)}</div>
+        <div class="doc-sub">${new Date(entry.ts).toLocaleString('pt-BR')}${topics?' · '+escapeHtml(topics):''}</div>
+      </div>
+      <span style="color:var(--blue);font-size:11px;">perguntar de novo →</span>
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('[data-hist-idx]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const entry = list[+el.dataset.histIdx];
+      chatInput.value = entry.question;
+      chatInput.style.height='auto'; chatInput.style.height=Math.min(chatInput.scrollHeight,110)+'px';
+      ov.remove();
+      chatInput.focus();
+    });
+  });
+}
+document.getElementById('chat-history-btn').addEventListener('click', openSearchHistory);
+async function logStudyEvent(question, hits){
+  const log = await getStudyLog();
+  const topics = [];
+  const seen = new Set();
+  for(const h of hits){
+    const key = h.doc.title + '|' + h.doc.category;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    topics.push({ title: h.doc.title, category: h.doc.category, aircraft: h.doc.aircraft });
+  }
+  const id = 'ev_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  log.push({ id, ts: new Date().toISOString(), question, topics, feedback: null });
+  while(log.length > STUDY_LOG_CAP) log.shift();
+  await kvSet('study-log', log);
+  return id;
+}
+async function setFeedback(eventId, value){
+  const log = await getStudyLog();
+  const entry = log.find(e=>e.id===eventId);
+  if(entry){ entry.feedback = value; await kvSet('study-log', log); }
+}
+
+async function renderTraining(){
+  const log = await getStudyLog();
+  document.getElementById('t-total').textContent = log.length;
+  document.getElementById('t-last').textContent = log.length ? new Date(log[log.length-1].ts).toLocaleString('pt-BR') : '—';
+
+  const byTopic = {};
+  for(const entry of log){
+    const topics = entry.topics && entry.topics.length ? entry.topics : [{title:'(sem manual associado)', category:'', aircraft:''}];
+    for(const t of topics){
+      const key = t.title + '|' + t.category;
+      if(!byTopic[key]) byTopic[key] = { ...t, count:0, last:entry.ts, up:0, down:0 };
+      byTopic[key].count++;
+      if(entry.ts > byTopic[key].last) byTopic[key].last = entry.ts;
+      if(entry.feedback === 'up') byTopic[key].up++;
+      if(entry.feedback === 'down') byTopic[key].down++;
+    }
+  }
+  const topics = Object.values(byTopic).map(t=>{
+    const rated = t.up + t.down;
+    t.score = rated>0 ? t.up/rated : null;
+    t.stars = t.score===null ? null : Math.max(1, Math.round(t.score*5));
+    return t;
+  }).sort((a,b)=>b.count-a.count);
+
+  const list = document.getElementById('topic-list');
+  if(topics.length===0){
+    list.innerHTML = '<div class="empty">Nenhuma pergunta registrada ainda. Use a aba Consulta.</div>';
+  }else{
+    list.innerHTML = topics.map((t,i)=>{
+      const starsHtml = t.stars===null ? '<span style="color:var(--dim2);">sem feedback ainda</span>' : '⭐'.repeat(t.stars) + '<span style="color:var(--dim2);">' + '☆'.repeat(5-t.stars) + '</span>';
+      return `<div class="doc-item topic-clickable" data-topic-idx="${i}" style="cursor:pointer;">
+        <div class="doc-meta">
+          <div class="doc-title">${escapeHtml(t.title)}${t.category?' · '+escapeHtml(t.category):''}</div>
+          <div class="doc-sub">${t.count} pergunta${t.count>1?'s':''} · última vez ${new Date(t.last).toLocaleDateString('pt-BR')} · ${starsHtml}</div>
+        </div>
+        <span style="color:var(--blue);font-size:11px;">revisar →</span>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('[data-topic-idx]').forEach(el=>{
+      el.addEventListener('click', ()=> goStudyTopic(topics[+el.dataset.topicIdx]) );
+    });
+  }
+
+  const sugg = document.getElementById('t-suggestion');
+  if(topics.length < 1){
+    sugg.textContent = 'Sem dados suficientes ainda — pergunte sobre mais de um tópico/manual pra eu conseguir comparar.';
+  }else{
+    // priority: pior score primeiro (com feedback), depois quem nunca recebeu feedback, depois mais antigo
+    const ranked = [...topics].sort((a,b)=>{
+      const aHas = a.score!==null, bHas = b.score!==null;
+      if(aHas && bHas) return a.score - b.score;
+      if(aHas !== bHas) return aHas ? -1 : 1; // quem tem score ruim vem antes de quem não tem dado nenhum
+      return new Date(a.last) - new Date(b.last);
+    });
+    const plan = ranked.slice(0,3);
+    const labels = ['Hoje','Depois','Próxima sessão'];
+    const minutes = [20,15,15];
+    sugg.innerHTML = plan.map((t,i)=>{
+      const reason = t.score!==null ? `nota baixa no seu feedback (${Math.round(t.score*100)}%)` : (t.count ? 'ainda sem feedback seu' : 'nunca revisado');
+      return `<div class="plan-item" data-plan-idx="${i}" style="cursor:pointer;padding:8px;margin:-8px -8px 0;border-radius:6px;">
+        <b>${labels[i]}</b> — ${escapeHtml(t.title)} <span style="color:var(--dim2);">(~${minutes[i]} min, ${reason})</span>
+        <span style="color:var(--blue);font-size:11px;"> · começar →</span>
+      </div>`;
+    }).join('<div style="height:8px;"></div>');
+    sugg.querySelectorAll('[data-plan-idx]').forEach(el=>{
+      el.addEventListener('click', ()=> goStudyTopic(plan[+el.dataset.planIdx]) );
+    });
+  }
+}
+
+function goStudyTopic(topic){
+  const promptText = `Quero revisar ${topic.title}${topic.category ? ' ('+topic.category+')' : ''}. Pode me dar um resumo rápido dos pontos principais e depois me testar com uma pergunta?`;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const talkBtn = document.querySelector('nav button[data-view="talk"]');
+  talkBtn.classList.add('active');
+  document.getElementById('view-talk').classList.add('active');
+  chatInput.value = promptText;
+  chatInput.style.height='auto'; chatInput.style.height=Math.min(chatInput.scrollHeight,110)+'px';
+  chatInput.focus();
+}
+
+/* ---------------- nav ---------------- */
+document.querySelectorAll('nav button[data-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if(btn.disabled) return;
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view === 'training') renderTraining();
+    if(btn.dataset.view === 'reports') renderReportHistory();
+  });
+});
+
+
+/* RotorMind unified navigation: preserve original application modules and IndexedDB */
+function rmOpen(view){
+  const button=document.querySelector('nav button[data-view="'+view+'"]');
+  if(button) button.click();
+}
+document.querySelectorAll('[data-rm-target]').forEach(el=>el.addEventListener('click',()=>rmOpen(el.dataset.rmTarget)));
+document.getElementById('rm-home-send').addEventListener('click',()=>{
+  const input=document.getElementById('rm-home-query');
+  const value=input.value.trim();
+  if(!value){input.focus();return;}
+  rmOpen('talk');
+  const chat=document.getElementById('chat-input');
+  chat.value=value;
+  chat.dispatchEvent(new Event('input',{bubbles:true}));
+  chat.focus();
+});
+document.getElementById('rm-home-query').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();document.getElementById('rm-home-send').click();}
+});
+
+/* ---------------- PDF processing ---------------- */
+const FLAG_RE = /\b(WARNING|CAUTION|NOTE|AVISO|ATEN[CÇ][AÃ]O)\b/i;
+const CHUNK_TARGET = 700;
+
+function splitIntoChunks(pageText, pageNum){
+  const clean = pageText.replace(/\s+/g,' ').trim();
+  if(!clean) return [];
+  const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [clean];
+  const chunks = []; let buf = '';
+  for(const s of sentences){
+    if((buf+s).length > CHUNK_TARGET && buf.length>0){
+      chunks.push(buf.trim()); buf = s;
+    } else { buf += s; }
+  }
+  if(buf.trim()) chunks.push(buf.trim());
+  return chunks.map(text => ({ page: pageNum, type: FLAG_RE.test(text) ? 'flagged' : 'text', text }));
+}
+
+async function extractPdf(file, onProgress){
+  await pdfWorkerReady;
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  let allChunks = [];
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const text = content.items.map(it=>it.str).join(' ');
+    allChunks = allChunks.concat(splitIntoChunks(text, p));
+    onProgress(p, pdf.numPages);
+  }
+  return allChunks;
+}
+
+/* ---------------- upload flow ---------------- */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.style.borderColor='var(--blue)';});
+dropzone.addEventListener('dragleave', ()=>{dropzone.style.borderColor='var(--border)';});
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault(); dropzone.style.borderColor='var(--border)';
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', ()=>{ if(fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function detectMetadata(chunks){
+  const firstPagesText = chunks.filter(c=>c.page<=6).map(c=>c.text).join(' \n ');
+  let revision = null, revisionDate = null;
+
+  const revRe = /\b(?:Revision|Rev(?:is[aã]o)?)\.?\s*(?:No\.?|N[°º]\.?)?\s*[:\-]?\s*(\d{1,3})\b/i;
+  const revMatch = firstPagesText.match(revRe);
+  if(revMatch) revision = 'Rev. ' + revMatch[1];
+
+  const monthsPt = {janeiro:'01',fevereiro:'02',março:'03',marco:'03',abril:'04',maio:'05',junho:'06',julho:'07',agosto:'08',setembro:'09',outubro:'10',novembro:'11',dezembro:'12'};
+  const monthsEn = {january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'};
+
+  let m;
+  if((m = firstPagesText.match(/\b(\d{4})-(\d{2})-(\d{2})\b/))){
+    revisionDate = `${m[1]}-${m[2]}-${m[3]}`;
+  }else if((m = firstPagesText.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/))){
+    const dd = m[1].padStart(2,'0'), mm = m[2].padStart(2,'0');
+    revisionDate = `${m[3]}-${mm}-${dd}`;
+  }else if((m = firstPagesText.match(/\b(\d{1,2})\s+de\s+([a-zçã]+)\s+de\s+(\d{4})\b/i))){
+    const mon = monthsPt[m[2].toLowerCase()];
+    if(mon) revisionDate = `${m[3]}-${mon}-${m[1].padStart(2,'0')}`;
+  }else if((m = firstPagesText.match(/\b([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})\b/))){
+    const mon = monthsEn[m[1].toLowerCase()];
+    if(mon) revisionDate = `${m[3]}-${mon}-${m[2].padStart(2,'0')}`;
+  }
+  return { revision, revisionDate };
+}
+
+async function handleFile(file){
+  if(file.type !== 'application/pdf'){ await showAlert('Envie um arquivo PDF.'); return; }
+  const title = document.getElementById('f-title').value.trim() || file.name.replace(/\.pdf$/i,'');
+  const typedRevision = document.getElementById('f-revision').value.trim();
+  const typedDate = document.getElementById('f-date').value;
+  const meta = {
+    id: 'doc_' + Date.now(),
+    title,
+    aircraft: document.getElementById('f-aircraft').value,
+    category: document.getElementById('f-category').value,
+    company: document.getElementById('f-company').value.trim(),
+    revision: typedRevision || 'N/A',
+    revisionDate: typedDate || '',
+    revisionAutoDetected: false,
+    addedAt: new Date().toISOString(),
+  };
+  dropzone.classList.add('busy');
+  let failed = false;
+  try{
+    dropzone.textContent = 'Extraindo texto...';
+    const chunks = await extractPdf(file, (p,total)=>{
+      dropzone.textContent = `Processando página ${p} de ${total}...`;
+    });
+    if(chunks.length===0){
+      throw new Error('Nenhum texto foi extraído — o PDF pode ser escaneado (imagem) sem OCR, sem suporte nesta versão.');
+    }
+    if(!typedRevision || !typedDate){
+      const detected = detectMetadata(chunks);
+      if(!typedRevision && detected.revision){ meta.revision = detected.revision; meta.revisionAutoDetected = true; }
+      if(!typedDate && detected.revisionDate){ meta.revisionDate = detected.revisionDate; }
+    }
+    meta.chunkCount = chunks.length;
+    await setChunks(meta.id, chunks);
+    if(document.getElementById('f-keep-pdf').checked){
+      dropzone.textContent = 'Guardando PDF completo...';
+      await setPdfBlob(meta.id, file);
+      meta.hasPdfBlob = true;
+    }
+    const idx = await getIndex();
+    idx.push(meta);
+    await setIndex(idx);
+    ['f-title','f-company','f-revision','f-date'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('f-keep-pdf').checked = true;
+    await renderDocs();
+  }catch(err){
+    console.error(err);
+    failed = true;
+    dropzone.innerHTML = `<span style="color:var(--red);">Falha ao processar: ${escapeHtml(err.message||String(err))}<br><span style="font-size:11px;color:var(--dim2);">toque para tentar de novo</span></span>`;
+  }finally{
+    dropzone.classList.remove('busy');
+    fileInput.value = '';
+    if(!failed){
+      dropzone.innerHTML = 'Toque para selecionar um PDF, ou arraste aqui<br><span style="font-size:11px;">extração de texto + indexação por página</span>';
+    }
+  }
+}
+
+async function renderDocs(){
+  const idx = await getIndex();
+  document.getElementById('doc-count').textContent = idx.length;
+  document.getElementById('s-doccount').textContent = idx.length;
+  document.getElementById('s-chunkcount').textContent = idx.reduce((a,d)=>a+(d.chunkCount||0),0);
+  const list = document.getElementById('doc-list');
+  if(idx.length===0){ list.innerHTML = '<div class="empty">Nenhum manual adicionado ainda.</div>'; return; }
+  const visibleDocs = (typeof v2Area !== "undefined") ? idx.filter(v2DocInArea) : idx;
+  if(visibleDocs.length===0){ list.innerHTML = '<div class="empty">Nenhum manual nesta área técnica. Selecione Todos ou importe um documento.</div>'; return; }
+  const sortedDocs = [...visibleDocs].sort((a,b)=>String(a.category||"Outro").localeCompare(String(b.category||"Outro"),"pt-BR") || String(a.title||"").localeCompare(String(b.title||""),"pt-BR"));
+  let lastCategory = null;
+  list.innerHTML = sortedDocs.map(d=>{ const cat = d.category || "Outro"; const section = cat !== lastCategory ? `<div class="rm-category-head">▤ ${escapeHtml(cat)}</div>` : ""; lastCategory = cat; return section + `
+    <div class="doc-item" data-id="${d.id}">
+      <div class="doc-meta">
+        <div class="doc-title">${escapeHtml(d.title)}</div>
+        <div class="doc-sub">${d.aircraft} · ${escapeHtml(d.category)} · ${escapeHtml(d.revision)}${d.revisionAutoDetected?' <span style="color:var(--amber)">(auto)</span>':''}${d.revisionDate ? ' · '+d.revisionDate : ''} · ${d.chunkCount} blocos${d.hasPdfBlob?' · <span style="color:var(--green)">🖼️ imagens disponíveis</span>':''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span class="doc-tag">indexado</span>
+        ${d.hasPdfBlob ? `<button class="btn" style="padding:5px 9px;font-size:11px;" data-view-pdf="${d.id}">📖 visualizar</button>` : ''}
+        <button class="btn" style="padding:5px 9px;font-size:11px;" data-edit="${d.id}">✏️ editar</button>
+        <button class="btn" style="padding:5px 9px;font-size:11px;" data-compare="${d.id}">🔄 comparar revisão</button>
+        <button class="btn btn-danger" style="padding:5px 9px;font-size:11px;" data-del="${d.id}">remover</button>
+      </div>
+    </div>`; }).join('');
+  list.querySelectorAll('[data-view-pdf]').forEach(b=>{
+    b.addEventListener('click', ()=> openPdfViewer(b.dataset.viewPdf));
+  });
+  list.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id = b.dataset.del;
+      const idx2 = (await getIndex()).filter(d=>d.id!==id);
+      await setIndex(idx2);
+      await deleteDoc(id);
+      await renderDocs();
+    });
+  });
+  list.querySelectorAll('[data-compare]').forEach(b=>{
+    b.addEventListener('click', ()=> startRevisionCompare(b.dataset.compare));
+  });
+  list.querySelectorAll('[data-edit]').forEach(b=>{
+    b.addEventListener('click', ()=> editDocMeta(b.dataset.edit));
+  });
+}
+
+async function editDocMeta(docId){
+  const idx = await getIndex();
+  const doc = idx.find(d=>d.id===docId);
+  if(!doc) return;
+  const r = await showModal({
+    title: 'Editar manual',
+    fields: [
+      { id:'title', label:'Título do documento', value: doc.title },
+      { id:'revision', label:'Revisão (ex: Rev. 4)', value: doc.revision==='N/A' ? '' : doc.revision },
+      { id:'date', label:'Data da revisão (AAAA-MM-DD, opcional)', value: doc.revisionDate||'' }
+    ],
+    confirmText: 'Salvar'
+  });
+  if(!r) return;
+  doc.title = r.title.trim() || doc.title;
+  doc.revision = r.revision.trim() || 'N/A';
+  doc.revisionDate = r.date.trim();
+  doc.revisionAutoDetected = false; // agora é confirmado manualmente
+  await setIndex(idx);
+  await renderDocs();
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------------- caixas próprias (substituem alert/confirm/prompt nativos, que ficam bloqueados em alguns sandboxes) ---------------- */
+function showModal({title, message, fields, confirmText, cancelText, danger, hideCancel}){
+  return new Promise((resolve)=>{
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(5,7,9,.85);z-index:80;display:flex;align-items:center;justify-content:center;padding:20px;';
+    const fieldsHtml = (fields||[]).map(f=>`<div class="field" style="margin-bottom:10px;"><label>${escapeHtml(f.label||'')}</label><input id="modal-${f.id}" value="${escapeHtml(f.value||'')}" placeholder="${escapeHtml(f.placeholder||'')}"></div>`).join('');
+    ov.innerHTML = `<div class="card" style="max-width:420px;width:100%;">
+      ${title?`<h3 style="text-transform:none;font-size:15px;color:var(--text);margin:0 0 10px;">${escapeHtml(title)}</h3>`:''}
+      ${message?`<p style="font-size:12.5px;color:var(--dim);line-height:1.5;margin:0 0 12px;">${escapeHtml(message)}</p>`:''}
+      ${fieldsHtml}
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        ${hideCancel?'':`<button class="btn" id="modal-cancel" style="flex:1;">${escapeHtml(cancelText||'Cancelar')}</button>`}
+        <button class="btn ${danger?'btn-danger':'btn-primary'}" id="modal-ok" style="flex:1;">${escapeHtml(confirmText||'OK')}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const firstInput = ov.querySelector('input');
+    if(firstInput) firstInput.focus();
+    const cancelBtn = ov.querySelector('#modal-cancel');
+    if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ ov.remove(); resolve(null); });
+    ov.querySelector('#modal-ok').addEventListener('click', ()=>{
+      let result = true;
+      if(fields && fields.length){
+        result = {};
+        fields.forEach(f=>{ result[f.id] = document.getElementById('modal-'+f.id).value; });
+      }
+      ov.remove();
+      resolve(result);
+    });
+  });
+}
+function showAlert(message, title){ return showModal({ title: title||'Aviso', message, confirmText:'OK', hideCancel:true }); }
+function showConfirm(message, title){ return showModal({ title: title||'Confirmar', message, confirmText:'Sim', cancelText:'Cancelar', danger:true }).then(r=>!!r); }
+async function showPrompt(label, value){
+  const r = await showModal({ fields:[{id:'v', label, value}], confirmText:'OK' });
+  return r ? r.v : null;
+}
+
+/* ---------------- revision comparison (Fase 2) ---------------- */
+function tokenSet(s){ return new Set(tokenize(s)); }
+function jaccard(a,b){
+  if(a.size===0 && b.size===0) return 1;
+  let inter=0; for(const t of a) if(b.has(t)) inter++;
+  const union = a.size + b.size - inter;
+  return union===0 ? 1 : inter/union;
+}
+
+function startRevisionCompare(oldDocId){
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'application/pdf';
+  input.onchange = ()=>{ if(input.files[0]) runRevisionCompare(oldDocId, input.files[0]); };
+  input.click();
+}
+
+function openDiffOverlay(){
+  let ov = document.getElementById('diff-overlay');
+  if(ov) ov.remove();
+  ov = document.createElement('div');
+  ov.id = 'diff-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(5,7,9,.85);z-index:50;overflow-y:auto;padding:16px;';
+  ov.innerHTML = `<div style="max-width:760px;margin:0 auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:14px;">Comparação de Revisão</h3>
+      <button class="btn" id="diff-close">Fechar</button>
+    </div>
+    <div id="diff-body"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('diff-close').addEventListener('click', ()=>ov.remove());
+  return document.getElementById('diff-body');
+}
+
+const SEVERITY_META = {
+  critical:  {label:'🔴 CRITICAL',   color:'var(--red)',   bg:'#2A1416'},
+  operational:{label:'🟠 OPERATIONAL',color:'var(--amber)', bg:'#2A1E10'},
+  technical: {label:'🟡 TECHNICAL',  color:'#E8D24A',       bg:'#26240F'},
+  minor:     {label:'🟢 MINOR',      color:'var(--green)', bg:'#12281B'},
+};
+
+async function runRevisionCompare(oldDocId, newFile){
+  const idx = await getIndex();
+  const oldMeta = idx.find(d=>d.id===oldDocId);
+  const body = openDiffOverlay();
+  body.innerHTML = '<div class="thinking">Extraindo nova revisão...</div>';
+
+  const apiKey = await getApiKey();
+  if(!apiKey){ body.innerHTML = '<div class="empty">Configure a API key em Settings antes de comparar revisões.</div>'; return; }
+
+  let newChunks;
+  try{
+    newChunks = await extractPdf(newFile, (p,total)=>{ body.innerHTML = `<div class="thinking">Extraindo página ${p} de ${total}...</div>`; });
+  }catch(err){ body.innerHTML = `<div class="empty" style="color:var(--red);">Falha ao extrair o novo PDF: ${escapeHtml(err.message)}</div>`; return; }
+
+  const oldChunks = await getChunks(oldDocId);
+  const pagesOf = (chs)=>{ const m={}; for(const c of chs){ m[c.page] = (m[c.page]||'') + ' ' + c.text; } return m; };
+  const oldPages = pagesOf(oldChunks), newPages = pagesOf(newChunks);
+  const allPageNums = [...new Set([...Object.keys(oldPages).map(Number), ...Object.keys(newPages).map(Number)])].sort((a,b)=>a-b);
+
+  const changedPages = [];
+  for(const p of allPageNums){
+    const o = oldPages[p], n = newPages[p];
+    if(o && !n) changedPages.push({page:p, status:'removed', oldText:o, newText:''});
+    else if(!o && n) changedPages.push({page:p, status:'added', oldText:'', newText:n});
+    else{
+      const sim = jaccard(tokenSet(o), tokenSet(n));
+      if(sim < 0.90) changedPages.push({page:p, status:'changed', oldText:o, newText:n, sim});
+    }
+  }
+
+  if(changedPages.length===0){
+    body.innerHTML = '<div class="empty">Nenhuma diferença relevante detectada entre as duas revisões (comparação por página, texto extraído).</div>';
+    return;
+  }
+  const MAX_PAGES = 40;
+  const capped = changedPages.slice(0, MAX_PAGES);
+  body.innerHTML = `<div class="thinking">Analisando ${capped.length} página(s) com diferenças (de ${changedPages.length} encontradas)${changedPages.length>MAX_PAGES?', limitado a '+MAX_PAGES+' pra não estourar a API':''}...</div>`;
+
+  const BATCH = 3;
+  const results = [];
+  const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+  for(let i=0;i<capped.length;i+=BATCH){
+    if(i>0) await sleep(1200);
+    const batch = capped.slice(i, i+BATCH);
+    body.innerHTML = `<div class="thinking">Classificando mudanças... (${Math.min(i+BATCH,capped.length)}/${capped.length})</div>`;
+    const prompt = `Você é um especialista em documentação de aviação analisando mudanças entre duas revisões do manual "${oldMeta.title}" (${oldMeta.aircraft}).
+Para cada página abaixo, compare o TEXTO ANTIGO e o TEXTO NOVO e responda SOMENTE com um array JSON válido, um objeto por página, neste formato exato:
+[{"page":<num>,"severity":"critical|operational|technical|minor","what_changed":"<frase curta em português>","operational_impact":"<frase curta em português>","study_recommendation":"<frase curta em português>"}]
+Critérios: critical = limitações, emergências, segurança; operational = SOP/perfis/responsabilidades PF-PM; technical = sistemas/descrição técnica; minor = mudança sem impacto operacional (formatação, revisão de texto).
+Não inclua nada fora do array JSON.
+
+${batch.map(c=>`--- PÁGINA ${c.page} (status: ${c.status}) ---\nANTIGO:\n${(c.oldText||'(página não existia)').slice(0,1500)}\nNOVO:\n${(c.newText||'(página removida)').slice(0,1500)}`).join('\n\n')}`;
+
+    try{
+      let data, lastErr, lastErrBody='';
+      for(const model of ["gemini-3.6-flash","gemini-3-flash-preview","gemini-3.1-flash-lite","gemini-2.5-flash"]){
+        try{
+          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+            method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+            body: JSON.stringify({ contents:[{role:'user', parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:1500, responseMimeType:'application/json'} })
+          });
+          if(!resp.ok){ lastErrBody = await resp.text(); const e=new Error('HTTP '+resp.status+': '+lastErrBody.slice(0,200)); e.status=resp.status; throw e; }
+          data = await resp.json(); lastErr=null; break;
+        }catch(e){ lastErr=e; if(e.status!==404 && e.status!==429) break; }
+      }
+      if(!data) throw lastErr;
+      const cand = (data.candidates||[])[0];
+      const raw = cand && cand.content && cand.content.parts ? cand.content.parts.map(p=>p.text||'').join('') : '';
+      if(!raw) throw new Error('resposta vazia da IA (finishReason: ' + (cand?cand.finishReason:'sem candidato') + ')');
+      const start = raw.indexOf('['), end = raw.lastIndexOf(']');
+      if(start===-1 || end===-1) throw new Error('IA não retornou JSON: ' + raw.slice(0,150));
+      const jsonStr = raw.slice(start, end+1);
+      const parsed = JSON.parse(jsonStr);
+      for(const item of parsed){
+        const src = batch.find(b=>b.page===item.page);
+        results.push({ ...item, status: src ? src.status : 'changed', confirmed:false });
+      }
+    }catch(err){
+      console.error('Diff batch failed:', err);
+      for(const c of batch){ results.push({page:c.page, severity:'operational', what_changed:'(falha ao classificar: ' + (err.message||String(err)).slice(0,180) + ')', operational_impact:'—', study_recommendation:'Ler a página diretamente nos dois manuais.', status:c.status, confirmed:false}); }
+    }
+  }
+
+  await kvSet('revision-diff:'+oldDocId+':'+Date.now(), { oldDocId, oldTitle:oldMeta.title, newFileName:newFile.name, ts:new Date().toISOString(), results });
+  renderDiffResults(body, results, oldMeta, newFile, newChunks);
+}
+
+function renderDiffResults(body, results, oldMeta, newFile, newChunks){
+  const order = ['critical','operational','technical','minor'];
+  results.sort((a,b)=> order.indexOf(a.severity) - order.indexOf(b.severity));
+  const criticalCount = results.filter(r=>r.severity==='critical').length;
+
+  body.innerHTML = `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="status-row"><span>Manual</span><span>${escapeHtml(oldMeta.title)}</span></div>
+      <div class="status-row"><span>Páginas com diferença</span><span>${results.length}</span></div>
+      <div class="status-row"><span>Críticas a confirmar</span><span id="diff-crit-remaining">${criticalCount}</span></div>
+    </div>
+    <div id="diff-list"></div>
+    <button class="btn btn-primary" id="diff-finish" style="margin-top:10px;width:100%;" ${criticalCount>0?'disabled':''}>
+      ${criticalCount>0 ? 'Confirme as mudanças 🔴 críticas para concluir' : 'Concluir e atualizar biblioteca'}
+    </button>
+  `;
+  const listEl = document.getElementById('diff-list');
+  listEl.innerHTML = results.map((r,i)=>{
+    const meta = SEVERITY_META[r.severity] || SEVERITY_META.technical;
+    return `<div class="card" style="border-left:3px solid ${meta.color};background:${meta.bg};margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div style="font-family:var(--mono);font-size:10.5px;color:${meta.color};">${meta.label} · pág. ${r.page} · ${r.status}</div>
+      </div>
+      <div style="font-size:13px;margin-top:6px;"><b>O que mudou:</b> ${escapeHtml(r.what_changed||'—')}</div>
+      <div style="font-size:12.5px;color:var(--dim);margin-top:3px;"><b>Impacto operacional:</b> ${escapeHtml(r.operational_impact||'—')}</div>
+      <div style="font-size:12.5px;color:var(--dim);margin-top:3px;"><b>O que estudar:</b> ${escapeHtml(r.study_recommendation||'—')}</div>
+      ${r.severity==='critical' ? `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px;color:var(--red);">
+        <input type="checkbox" data-confirm-idx="${i}"> Confirmo que revisei esta mudança crítica
+      </label>` : ''}
+    </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('[data-confirm-idx]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      results[+cb.dataset.confirmIdx].confirmed = cb.checked;
+      const remaining = results.filter(r=>r.severity==='critical' && !r.confirmed).length;
+      document.getElementById('diff-crit-remaining').textContent = remaining;
+      const finishBtn = document.getElementById('diff-finish');
+      finishBtn.disabled = remaining>0;
+      finishBtn.textContent = remaining>0 ? 'Confirme as mudanças 🔴 críticas para concluir' : 'Concluir e atualizar biblioteca';
+    });
+  });
+
+  document.getElementById('diff-finish').addEventListener('click', async ()=>{
+    const title = oldMeta.title;
+    const suggestedRev = await showPrompt('Confirmar: qual o número/rótulo da nova revisão?', '');
+    const newMeta = {
+      id: 'doc_' + Date.now(),
+      title, aircraft: oldMeta.aircraft, category: oldMeta.category, company: oldMeta.company,
+      revision: (suggestedRev && suggestedRev.trim()) || 'N/A',
+      revisionDate: new Date().toISOString().slice(0,10),
+      revisionAutoDetected: false,
+      supersedes: oldMeta.id,
+      chunkCount: newChunks.length,
+      addedAt: new Date().toISOString(),
+    };
+    await setChunks(newMeta.id, newChunks);
+    const idx = await getIndex();
+    idx.push(newMeta);
+    await setIndex(idx);
+    document.getElementById('diff-overlay').remove();
+    await renderDocs();
+  });
+}
+
+document.getElementById('btn-savekey').addEventListener('click', async ()=>{
+  const val = document.getElementById('f-apikey').value.trim();
+  if(!val){ return; }
+  await setApiKey(val);
+  document.getElementById('f-apikey').value = '';
+  document.getElementById('key-status').textContent = 'salva ✓';
+  setTimeout(()=>{ document.getElementById('key-status').textContent=''; }, 2500);
+});
+
+document.getElementById('btn-export').addEventListener('click', async ()=>{
+  const idx = await getIndex();
+  const chunksById = {};
+  for(const d of idx){ chunksById[d.id] = await getChunks(d.id); }
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    app: 'Aviator AI',
+    version: 1,
+    documents: idx,
+    chunksById
+  };
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'aviator_ai_biblioteca_' + new Date().toISOString().slice(0,10) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('btn-import').addEventListener('click', ()=>{
+  document.getElementById('import-file-input').click();
+});
+document.getElementById('import-file-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  const statusEl = document.getElementById('import-status');
+  statusEl.textContent = 'Importando...';
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if(!payload.documents || !payload.chunksById) throw new Error('Arquivo não parece ser um export válido do Aviator AI.');
+    const existing = await getIndex();
+    const existingIds = new Set(existing.map(d=>d.id));
+    let added = 0, skipped = 0;
+    for(const doc of payload.documents){
+      if(existingIds.has(doc.id)){ skipped++; continue; }
+      await setChunks(doc.id, payload.chunksById[doc.id] || []);
+      existing.push(doc);
+      added++;
+    }
+    await setIndex(existing);
+    await renderDocs();
+    statusEl.innerHTML = `<span style="color:var(--green);">Importado: ${added} manual(is) novo(s)${skipped?', '+skipped+' já existiam (ignorados)':''}.</span>`;
+  }catch(err){
+    statusEl.innerHTML = `<span style="color:var(--red);">Falha ao importar: ${escapeHtml(err.message||String(err))}</span>`;
+  }
+});
+
+document.getElementById('btn-wipe').addEventListener('click', async ()=>{
+  if(!(await showConfirm('Apagar todos os manuais indexados?'))) return;
+  const idx = await getIndex();
+  for(const d of idx) await deleteDoc(d.id);
+  await setIndex([]);
+  await renderDocs();
+});
+
+/* ---------------- retrieval (keyword, client-side) ---------------- */
+const STOP = new Set(['o','a','os','as','de','da','do','das','dos','em','no','na','nos','nas','um','uma','para','por','com','que','se','e','é','ou','como','qual','quais','the','a','an','of','in','on','for','to','is','are','what','how','which','and','or']);
+function stripAccents(s){ return s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function stem(word){
+  if(word.length<=4) return word;
+  return word
+    .replace(/coes$/,'cao')
+    .replace(/oes$/,'ao')
+    .replace(/ais$/,'al')
+    .replace(/eis$/,'el')
+    .replace(/ns$/,'m')
+    .replace(/es$/,'')
+    .replace(/s$/,'');
+}
+function tokenize(s){ return (stripAccents(s.toLowerCase()).match(/[a-z0-9]+/g)||[]).filter(t=>t.length>1 && !STOP.has(t)).map(stem); }
+
+// Siglas e termos de aviação comuns -> expansões pra ampliar a busca (PT/EN, sigla <-> nome por extenso)
+const AVIATION_SYNONYMS = {
+  'rtom': ['peso maximo decolagem operacional', 'restricted takeoff mass'],
+  'oei': ['motor inoperante', 'one engine inoperative'],
+  'aeo': ['todos motores operantes', 'all engines operative'],
+  'iimc': ['condicoes meteorologicas instrumentais inadvertidas', 'inadvertent imc'],
+  'ecl': ['emergency checklist', 'checklist de emergencia'],
+  'mgo': ['manual geral de operacoes'],
+  'omb': ['operations manual base', 'manual operacional basico'],
+  'rfm': ['rotorcraft flight manual', 'manual de voo'],
+  'afm': ['aircraft flight manual', 'manual de voo'],
+  'crm': ['crew resource management', 'gerenciamento de recursos da tripulacao'],
+  'afcs': ['automatic flight control system', 'piloto automatico'],
+  'hidraulico': ['hydraulic', 'sistema hidraulico'],
+  'hydraulic': ['hidraulico', 'sistema hidraulico'],
+  'decolagem': ['takeoff', 'partida'],
+  'takeoff': ['decolagem'],
+  'pouso': ['landing', 'aterrissagem'],
+  'landing': ['pouso', 'aterrissagem'],
+  'motor': ['engine', 'powerplant'],
+  'engine': ['motor'],
+  'combustivel': ['fuel'],
+  'fuel': ['combustivel'],
+  'eletrico': ['electrical'],
+  'electrical': ['eletrico'],
+  'gerador': ['generator'],
+  'bateria': ['battery'],
+  'incendio': ['fire'],
+  'fire': ['incendio'],
+  'falha': ['failure', 'pane'],
+  'failure': ['falha', 'pane'],
+  'pane': ['failure', 'falha'],
+  'emergencia': ['emergency'],
+  'emergency': ['emergencia'],
+  'limitacao': ['limitation', 'limite'],
+  'limitation': ['limitacao', 'limite'],
+  'helideck': ['heliponto', 'plataforma'],
+  'rotor': ['main rotor', 'rotor principal', 'tail rotor', 'rotor de cauda'],
+  'trem': ['landing gear', 'trem de pouso'],
+  'teto': ['ceiling'],
+  'ceiling': ['teto'],
+  'visibilidade': ['visibility'],
+  'visibility': ['visibilidade'],
+  'voo': ['flight'],
+  'flight': ['voo'],
+  'minimos': ['minima', 'minimums', 'limites'],
+  'minima': ['minimos', 'minimums'],
+  'vento': ['wind'],
+  'wind': ['vento'],
+  'teto e visibilidade': ['ceiling and visibility'],
+  'pouso': ['landing'],
+  'landing': ['pouso', 'trem de pouso'],
+  'bequilha': ['nose wheel', 'nose gear'],
+  'aterrissagem': ['landing', 'pouso'],
+  'freio': ['brake'],
+  'brake': ['freio'],
+  'roda': ['wheel'],
+  'wheel': ['roda'],
+  'amortecedor': ['shock strut', 'shock absorber'],
+  'principal': ['main'],
+  'cauda': ['tail'],
+  'pas': ['blades', 'blade'],
+  'blades': ['pas', 'pa do rotor'],
+  'cubo': ['hub'],
+  'hub': ['cubo'],
+  'caixa de transmissao': ['gearbox', 'transmission'],
+  'gearbox': ['caixa de transmissao', 'transmissao'],
+  'heliponto': ['helideck', 'plataforma'],
+  'afastado': ['offshore', 'mar aberto'],
+  'offshore': ['afastado', 'mar aberto'],
+  'peso': ['weight', 'mass'],
+  'weight': ['peso'],
+};
+
+function expandQueryTokens(query){
+  const qSet = new Set(tokenize(query));
+  const normQuery = stripAccents(query.toLowerCase());
+  for(const key in AVIATION_SYNONYMS){
+    if((new RegExp('(?:^|[^a-z0-9])'+key+'(?:$|[^a-z0-9])')).test(normQuery) || qSet.has(stem(key))){
+      for(const exp of AVIATION_SYNONYMS[key]){ for(const t of tokenize(exp)) qSet.add(t); }
+    }
+  }
+  return qSet;
+}
+
+const aviatorSearchTokenCache = new Map();
+async function retrieve(query, topK=8){
+  const idx = await getIndex();
+  if(idx.length===0) return [];
+  const qSet = expandQueryTokens(query);
+  if(qSet.size===0) return [];
+
+  // manuais cujo NOME bate com a pergunta (ex: "tem no CAE rev4") ganham prioridade,
+  // mesmo que o conteúdo interno das páginas não repita essas palavras
+  const titleMatchDocIds = new Set();
+  for(const doc of idx){
+    const titleTokens = tokenize(doc.title);
+    if(titleTokens.some(t => qSet.has(t))) titleMatchDocIds.add(doc.id);
+  }
+
+  // RotorMind 2.7: precompute per-query document frequency to avoid rewarding ubiquitous terms.
+  const corpus = [];
+  const df = Object.create(null);
+  let totalChunks = 0;
+  for(const doc of idx){
+    const chunks = await getChunks(doc.id);
+    let cached = aviatorSearchTokenCache.get(doc.id);
+    if(!cached || cached.chunks !== chunks){
+      cached = {chunks, entries:chunks.map(c=>{
+        const tokens = tokenize(c.text || '');
+        const freq = Object.create(null);
+        for(const t of tokens) freq[t] = (freq[t]||0)+1;
+        return {c, tokens, freq};
+      })};
+      aviatorSearchTokenCache.set(doc.id,cached);
+    }
+    corpus.push({doc,cached});
+    for(const entry of cached.entries){
+      totalChunks++;
+      for(const t of qSet) if(entry.freq[t]) df[t]=(df[t]||0)+1;
+    }
+  }
+  const scored = [];
+  for(const {doc,cached} of corpus){
+    const chunks = cached.chunks;
+    const isTitleMatch = titleMatchDocIds.has(doc.id);
+    for(const entry of cached.entries){
+      const c = entry.c;
+      const cTokens = entry.tokens;
+      if(cTokens.length===0) continue;
+      const freq = entry.freq;
+      let totalFreq = 0, distinctMatches = 0;
+      for(const qt of qSet) if(freq[qt]){ totalFreq += freq[qt]; distinctMatches++; }
+      if(distinctMatches===0 && !isTitleMatch) continue;
+      // reward covering more distinct query terms; dampen raw term-frequency and chunk length bias
+      const avgLength = 180;
+      let score = 0;
+      for(const qt of qSet){
+        const tf = freq[qt] || 0;
+        if(!tf) continue;
+        const idf = Math.log(1 + (totalChunks - (df[qt]||0) + 0.5) / ((df[qt]||0) + 0.5));
+        score += idf * (tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * cTokens.length / avgLength));
+      }
+      score += (distinctMatches / qSet.size) * 4;
+      if(c.type==='flagged') score += 1.5;
+      if(isTitleMatch) score += 3;
+      score = Math.round(score * 10) / 10;
+      scored.push({doc, chunk:c, score});
+    }
+  }
+  scored.sort((a,b)=>b.score-a.score);
+
+  // se um manual bateu pelo nome mas nenhuma página dele tem conteúdo relevante,
+  // inclui mesmo assim uma amostra (ex: página com WARNING/CAUTION/NOTE, ou a primeira)
+  // pra pelo menos indicar que ele existe na biblioteca
+  for(const docId of titleMatchDocIds){
+    if(scored.some(s => s.doc.id === docId)) continue;
+    const doc = idx.find(d=>d.id===docId);
+    const chunks = await getChunks(docId);
+    if(chunks.length===0) continue;
+    const sample = chunks.find(c=>c.type==='flagged') || chunks[0];
+    scored.push({ doc, chunk: sample, score: 0.1, titleOnly: true });
+  }
+  scored.sort((a,b)=>b.score-a.score);
+
+  // garante diversidade: todo manual com resultado relevante entra (não só os
+  // que têm mais overlap no total) — mas só se tiver um mínimo de relevância,
+  // pra não forçar manual errado só pra "dar chance a todos"
+  const topScore = scored.length ? scored[0].score : 0;
+  const minRelevance = Math.max(0.4, topScore * 0.28);
+  const perDocCap = 2;
+  const picked = [];
+  const perDocCount = {};
+  for(const s of scored){
+    if(s.score < minRelevance) continue;
+    const count = perDocCount[s.doc.id] || 0;
+    if(count < perDocCap){ picked.push(s); perDocCount[s.doc.id] = count+1; }
+    if(picked.length >= topK) break;
+  }
+  if(picked.length < topK){
+    for(const s of scored){
+      if(picked.length >= topK) break;
+      if(!picked.includes(s)) picked.push(s);
+    }
+  }
+  return picked.slice(0, topK);
+}
+
+/* ---------------- chat ---------------- */
+const chatScroll = document.getElementById('chat-scroll');
+const chatInput = document.getElementById('chat-input');
+const chatSend = document.getElementById('chat-send');
+const chatPreview = document.getElementById('chat-preview');
+let history = [];
+
+chatInput.addEventListener('input', ()=>{ chatInput.style.height='auto'; chatInput.style.height=Math.min(chatInput.scrollHeight,110)+'px'; });
+chatInput.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } });
+chatSend.addEventListener('click', sendMessage);
+chatPreview.addEventListener('click', previewRetrieval);
+
+/* ---------------- Resumos cruzando manuais + exportação (PDF/PPTX) ---------------- */
+let currentReport = null;
+
+async function reportRetrieve(topic, aircraft, topK){
+  const idx = await getIndex();
+  const filtered = aircraft ? idx.filter(d=>d.aircraft===aircraft) : idx;
+  if(filtered.length===0) return [];
+
+  if(topic && topic.trim()){
+    const qSet = expandQueryTokens(topic);
+    const scored = [];
+    for(const doc of filtered){
+      const chunks = await getChunks(doc.id);
+      for(const c of chunks){
+        const cTokens = tokenize(c.text);
+        if(cTokens.length===0) continue;
+        const freq = {}; for(const t of cTokens) freq[t]=(freq[t]||0)+1;
+        let totalFreq=0, distinctMatches=0;
+        for(const qt of qSet) if(freq[qt]){ totalFreq+=freq[qt]; distinctMatches++; }
+        if(distinctMatches===0) continue;
+        let score = (distinctMatches/qSet.size)*10 + (totalFreq/Math.sqrt(cTokens.length));
+        if(c.type==='flagged') score += 1.5;
+        scored.push({doc, chunk:c, score});
+      }
+    }
+    scored.sort((a,b)=>b.score-a.score);
+    return scored.slice(0, topK);
+  }
+
+  // sem tema: resumo geral — amostra espalhada por página em cada manual, priorizando WARNING/CAUTION/NOTE
+  const perDoc = Math.max(2, Math.floor(topK / filtered.length));
+  const result = [];
+  for(const doc of filtered){
+    const chunks = await getChunks(doc.id);
+    if(chunks.length===0) continue;
+    const flagged = chunks.filter(c=>c.type==='flagged');
+    const rest = chunks.filter(c=>c.type!=='flagged');
+    const picked = [];
+    const step = Math.max(1, Math.floor(rest.length / perDoc));
+    for(let i=0; i<rest.length && picked.length<perDoc; i+=step) picked.push(rest[i]);
+    const combined = [...flagged.slice(0, Math.ceil(perDoc/2)), ...picked].slice(0, perDoc);
+    for(const c of combined) result.push({doc, chunk:c, score:0});
+  }
+  return result.slice(0, topK);
+}
+
+function parseReportRequest(raw){
+  const norm = stripAccents(raw.toLowerCase());
+  let format = 'tela';
+  if(/powerpoint|apresentac|slides?\b|\bppt\b/.test(norm)) format = 'pptx';
+  else if(/\bpdf\b/.test(norm)) format = 'pdf';
+
+  let aircraft = '';
+  if(/aw ?139/.test(norm)) aircraft = 'AW139';
+  else if(/s[\s\-]?92/.test(norm)) aircraft = 'S-92';
+
+  const wantsImages = /imagem|imagens|figura|foto/.test(norm);
+
+  // remove palavras de comando pra sobrar só o tema como query de busca
+  const topic = raw
+    .replace(/\b(gerar|gere|criar|crie|fazer|faça|faca|quero|preciso de|preciso|solicito|monta|montar|um|uma|para mim)\b/gi, ' ')
+    .replace(/\b(resumo|powerpoint|apresentação|apresentacao|slides?|ppt|pdf)\b/gi, ' ')
+    .replace(/\b(sobre|do|da|de|no|na|com imagens|com imagem)\b/gi, ' ')
+    .replace(/\s+/g,' ').trim();
+
+  return { format, aircraft, wantsImages, topic };
+}
+
+/* ---------------- Resumos: geração (chamada pela aba Consulta) + histórico ---------------- */
+async function generateImageForReport(titulo, topic, aircraft){
+  try{
+    const apiKey = await getApiKey();
+    if(!apiKey) return null;
+    const imgPrompt = `Ilustração técnica profissional, estilo diagrama/infográfico limpo, tema: ${topic || titulo}${aircraft?' — helicóptero '+aircraft:''}. Sem texto, sem logotipos, visual claro e institucional, cores escuras/azuis, adequado pra capa de material de treinamento de aviação.`;
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent`, {
+      method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+      body: JSON.stringify({ contents:[{role:'user', parts:[{text:imgPrompt}]}], generationConfig:{ responseModalities:['IMAGE'] } })
+    });
+    if(!resp.ok) return null;
+    const data = await resp.json();
+    const cand = (data.candidates||[])[0];
+    const part = cand && cand.content && cand.content.parts ? cand.content.parts.find(p=>p.inlineData) : null;
+    if(!part) return null;
+    return { mimeType: part.inlineData.mimeType || 'image/png', data: part.inlineData.data };
+  }catch(err){
+    console.error('Falha ao gerar imagem:', err);
+    return null;
+  }
+}
+
+async function generateReportFromRequest(rawRequest){
+  const { format, aircraft, wantsImages, topic } = parseReportRequest(rawRequest);
+  const hits = await reportRetrieve(topic, aircraft, 24);
+  if(hits.length===0){
+    throw new Error('Nenhum manual encontrado' + (aircraft?' para '+aircraft:'') + '. Adicione manuais em Manuals primeiro.');
+  }
+  const apiKey = await getApiKey();
+  if(!apiKey){ throw new Error('Configure a API key do Gemini em Settings antes de gerar.'); }
+  const approved = await showModal({title:'Autorização de envio de fontes', message:'Para gerar este material com Gemini, trechos dos manuais recuperados serão enviados ao Google. NÃO prossiga com documentos confidenciais ou sem autorização expressa. Deseja autorizar este envio específico?', confirmText:'Autorizo este envio', cancelText:'Cancelar'});
+  if(!approved) throw new Error('Geração cancelada: os trechos dos manuais não foram enviados.');
+
+  const sectionLimit = topic && topic.trim() ? '3 a 8 seções, cada uma com 3 a 6 bullets' : '3 a 5 seções, cada uma com 3 a 5 bullets (resumo geral — seja mais conciso, sem tema específico pra focar)';
+  const contextBlock = hits.map((h,i)=>`[${i+1}] ${h.doc.title} (${h.doc.aircraft}, Rev. ${h.doc.revision}, pág. ${h.chunk.page}): """${h.chunk.text}"""`).join('\n\n');
+  const prompt = `Você é um especialista em documentação técnica de aviação. Gere um resumo técnico estruturado sobre "${topic || 'visão geral dos manuais disponíveis'}"${aircraft ? ' para o '+aircraft : ''}, usando APENAS os trechos de manual abaixo. Nunca invente números, limitações ou procedimentos.
+
+Responda SOMENTE com JSON válido, sem markdown e sem texto fora do JSON, neste formato exato:
+{"titulo":"...", "secoes":[{"heading":"...","bullets":["...","..."]}]}
+
+Regras: ${sectionLimit}, bullets curtos e objetivos (uma frase cada), técnicos. Inclua números/limitações exatos quando existirem nos trechos. Se algo relevante para o tema não estiver nos trechos fornecidos, adicione uma seção final "Lacunas" explicando o que não foi encontrado na biblioteca.
+
+TRECHOS DE MANUAL:
+${contextBlock}`;
+
+  let data, lastErr;
+  for(const model of GEMINI_MODEL_CANDIDATES){
+    try{
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+        body: JSON.stringify({ contents:[{role:'user', parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:6000, responseMimeType:'application/json'} })
+      });
+      if(!resp.ok){ const errText = await resp.text(); const e=new Error('HTTP '+resp.status+': '+errText.slice(0,200)); e.status=resp.status; throw e; }
+      data = await resp.json(); lastErr=null; break;
+    }catch(e){ lastErr=e; if(e.status!==404 && e.status!==429) break; }
+  }
+  if(!data) throw lastErr;
+  if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  const cand = (data.candidates||[])[0];
+  const raw = cand && cand.content && cand.content.parts ? cand.content.parts.map(p=>p.text||'').join('') : '';
+  if(cand && cand.finishReason === 'MAX_TOKENS'){
+    throw new Error('A resposta ficou grande demais e foi cortada no meio. Tente um pedido com tema mais específico (ex: "resumo do sistema hidráulico" em vez de um resumo geral de tudo).');
+  }
+  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
+  let parsed;
+  try{
+    if(start===-1 || end===-1) throw new Error('resposta vazia ou sem JSON');
+    parsed = JSON.parse(raw.slice(start, end+1));
+  }catch(parseErr){
+    throw new Error('A IA não retornou um resumo completo (resposta cortada ou malformada). Tente de novo, ou peça um tema mais específico.');
+  }
+  let image = null;
+  if(wantsImages){ image = await generateImageForReport(parsed.titulo, topic, aircraft); }
+
+  // Preferir figuras aprovadas pelo usuário, sem enviar imagens à IA externa.
+  // Evitar renderização automática de dezenas de páginas e consumo excessivo de memória no iPad.
+  const pageImages = [];
+  if(wantsImages){
+    const chosen = (typeof rmSelectedFigures !== 'undefined') ? [...rmSelectedFigures.values()].slice(0,8) : [];
+    for(const f of chosen){
+      pageImages.push({dataUrl:f.image, docTitle:f.title, revision:f.revision||'não informada', page:f.page, approved:true});
+    }
+  }
+
+  return { parsed, hits, format, aircraft, topic, wantsImages, image, pageImages };
+}
+
+async function saveReportToHistory(report){
+  const log = (await kvGet('report-history')) || [];
+  const lightHits = report.hits.map(h=>({doc:{title:h.doc.title, revision:h.doc.revision, aircraft:h.doc.aircraft, category:h.doc.category}, chunk:{page:h.chunk.page, type:h.chunk.type}}));
+  log.push({ id:'rep_'+Date.now(), ts:new Date().toISOString(), format:report.format, topic:report.topic, aircraft:report.aircraft, parsed:report.parsed, hits:lightHits, wantsImages:report.wantsImages, image:report.image||null, pageImages:report.pageImages||[] });
+  while(log.length>30) log.shift();
+  await kvSet('report-history', log);
+}
+
+async function renderReportHistory(){
+  const log = (await kvGet('report-history')) || [];
+  const list = document.getElementById('report-history-list');
+  if(log.length===0){ list.innerHTML = '<div class="empty">Nenhum resumo gerado ainda. Peça na aba Consulta.</div>'; return; }
+  list.innerHTML = [...log].reverse().map(r=>`
+    <div class="doc-item">
+      <div class="doc-meta">
+        <div class="doc-title">${escapeHtml(r.parsed.titulo||'Resumo')}</div>
+        <div class="doc-sub">${new Date(r.ts).toLocaleString('pt-BR')} · ${r.format==='pptx'?'PowerPoint':r.format==='pdf'?'PDF':'texto'}</div>
+      </div>
+      <button class="btn" style="padding:5px 9px;font-size:11px;" data-view-report="${r.id}">ver</button>
+    </div>`).join('');
+  list.querySelectorAll('[data-view-report]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const rec = log.find(x=>x.id===b.dataset.viewReport);
+      currentReport = { parsed: rec.parsed, hits: rec.hits, wantsImages: rec.wantsImages, image: rec.image, pageImages: rec.pageImages||[] };
+      renderReport();
+    });
+  });
+}
+
+function addReportBubble(report){
+  const empty = document.getElementById('chat-empty'); if(empty) empty.remove();
+  const { parsed, hits, wantsImages, image, pageImages } = report;
+  const srcSet = [...new Map(hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
+  const wrap = document.createElement('div');
+  wrap.className = 'msg assistant';
+  wrap.style.maxWidth = '95%';
+  wrap.innerHTML = `<div class="bubble">
+    <div style="font-weight:600;font-size:14px;margin-bottom:8px;">${escapeHtml(parsed.titulo||'Resumo')}</div>
+    ${image ? `<img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;margin-bottom:10px;">` : (wantsImages ? `<div style="font-size:12px;color:var(--red);margin-bottom:8px;">⚠️ Não consegui gerar a imagem dessa vez (tente de novo).</div>` : '')}
+    ${(parsed.secoes||[]).map(sec=>`<div style="margin-bottom:10px;"><div style="font-weight:600;font-size:12.5px;color:var(--blue);margin-bottom:4px;">${escapeHtml(sec.heading||'')}</div><ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;">${(sec.bullets||[]).map(b=>`<li>${escapeHtml(b)}</li>`).join('')}</ul></div>`).join('')}
+  </div>
+  ${pageImages && pageImages.length>0 ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-top:8px;padding-bottom:4px;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div>` : ''}
+  <div class="sources"><div class="src-title">📚 FONTES</div>${srcSet.map(h=>`${escapeHtml(h.doc.title)} · Rev. ${escapeHtml(h.doc.revision)} · pág. ${h.chunk.page}`).join('<br>')}</div>
+  <div class="feedback-row"><button class="fb-btn" data-rb-pdf>📄 PDF</button><button class="fb-btn" data-rb-pptx>📊 PowerPoint</button></div>`;
+  chatScroll.appendChild(wrap);
+  chatScroll.scrollTop = chatScroll.scrollHeight;
+  wrap.querySelector('[data-rb-pdf]').addEventListener('click', ()=>{ currentReport = report; exportReportPDF(); });
+  wrap.querySelector('[data-rb-pptx]').addEventListener('click', ()=>{ currentReport = report; exportReportPPTX(); });
+}
+
+function renderReport(){
+  const { parsed, hits, wantsImages, image, pageImages } = currentReport;
+  document.getElementById('report-history-wrap').style.display = 'none';
+  const el = document.getElementById('report-result');
+  el.style.display = 'block';
+
+  const srcSet = [...new Map(hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
+
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
+        <h3 style="margin:0;text-transform:none;font-size:16px;color:var(--text);">${escapeHtml(parsed.titulo||'Resumo')}</h3>
+        <button class="btn" id="report-back" style="flex-shrink:0;font-size:11px;padding:5px 9px;">← voltar</button>
+      </div>
+    </div>
+    ${image ? `<div class="card"><img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;"></div>` : (wantsImages ? `<div class="card" style="border-left:3px solid var(--red);background:#2A1416;">
+      <div style="font-size:12.5px;color:var(--red);">⚠️ Não consegui gerar a imagem dessa vez. Tente pedir de novo.</div>
+    </div>` : '')}
+    ${pageImages && pageImages.length>0 ? `<div class="card"><h3>Imagens dos manuais</h3><div style="display:flex;gap:8px;overflow-x:auto;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);cursor:pointer;" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div></div>` : ''}
+    ${(parsed.secoes||[]).map(sec => `
+      <div class="card">
+        <h3>${escapeHtml(sec.heading||'')}</h3>
+        <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;">
+          ${(sec.bullets||[]).map(b=>`<li>${escapeHtml(b)}</li>`).join('')}
+        </ul>
+      </div>`).join('')}
+    <div class="card">
+      <h3>Fontes</h3>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--blue);line-height:1.8;">
+        ${srcSet.map(h => `${escapeHtml(h.doc.title)} · Rev. ${escapeHtml(h.doc.revision)} · pág. ${h.chunk.page}`).join('<br>')}
+      </div>
+    </div>
+    <div class="card">
+      <button class="btn btn-primary" id="report-export-pdf" style="width:100%;margin-bottom:8px;">📄 Baixar como PDF</button>
+      <button class="btn btn-primary" id="report-export-pptx" style="width:100%;">📊 Baixar como PowerPoint</button>
+    </div>
+  `;
+  document.getElementById('report-back').addEventListener('click', async ()=>{
+    document.getElementById('report-history-wrap').style.display = 'flex';
+    el.style.display = 'none';
+    await renderReportHistory();
+  });
+  document.getElementById('report-export-pdf').addEventListener('click', exportReportPDF);
+  document.getElementById('report-export-pptx').addEventListener('click', exportReportPPTX);
+}
+
+function exportReportPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const pageW = 210, marginL = 15, marginR = 15, maxW = pageW - marginL - marginR;
+  let y = 20;
+  doc.setFontSize(16); doc.setFont(undefined,'bold');
+  const titleLines = doc.splitTextToSize(currentReport.parsed.titulo || 'Resumo', maxW);
+  doc.text(titleLines, marginL, y); y += titleLines.length*7 + 4;
+
+  doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(140);
+  doc.text(doc.splitTextToSize('FOR TRAINING AND STUDY PURPOSES ONLY. ALWAYS FOLLOW THE CURRENT APPROVED OPERATIONAL DOCUMENTATION.', maxW), marginL, y);
+  y += 12; doc.setTextColor(0);
+
+  if(currentReport.image){
+    try{
+      const imgW = maxW, imgH = imgW * 0.6;
+      doc.addImage('data:'+currentReport.image.mimeType+';base64,'+currentReport.image.data, marginL, y, imgW, imgH);
+      y += imgH + 10;
+    }catch(e){ console.error('Falha ao embutir imagem no PDF:', e); }
+  }
+
+  for(const sec of (currentReport.parsed.secoes||[])){
+    if(y>270){ doc.addPage(); y=20; }
+    doc.setFontSize(13); doc.setFont(undefined,'bold');
+    doc.text(doc.splitTextToSize(sec.heading||'', maxW), marginL, y); y += 8;
+    doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+    for(const b of (sec.bullets||[])){
+      const lines = doc.splitTextToSize('• ' + b, maxW - 3);
+      for(const line of lines){
+        if(y>282){ doc.addPage(); y=20; }
+        doc.text(line, marginL+3, y); y += 5.8;
+      }
+    }
+    y += 4;
+  }
+
+  if(currentReport.pageImages && currentReport.pageImages.length>0){
+    for(const pi of currentReport.pageImages){
+      doc.addPage(); y=18;
+      doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text('Figura selecionada do manual', marginL, y); y+=9;
+      try{
+        const props=doc.getImageProperties(pi.dataUrl);
+        const usableH=242;
+        const ratio=Math.min(maxW/props.width,usableH/props.height);
+        const imgW=props.width*ratio, imgH=props.height*ratio;
+        doc.addImage(pi.dataUrl, marginL+(maxW-imgW)/2, y, imgW, imgH);
+        y+=imgH+7;
+        doc.setFontSize(8.5); doc.setFont(undefined,'normal'); doc.setTextColor(90);
+        const caption=doc.splitTextToSize(`${pi.docTitle} · Rev. ${pi.revision||'não informada'} · PDF pág. ${pi.page}`,maxW);
+        doc.text(caption,marginL,y); y+=caption.length*5+5;
+        doc.setTextColor(0);
+      }catch(e){ console.error('Falha ao embutir página do manual no PDF:', e); }
+    }
+  }
+
+  if(y>255){ doc.addPage(); y=20; }
+  doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text('Fontes', marginL, y); y += 7;
+  doc.setFont(undefined,'normal'); doc.setFontSize(8.5);
+  const srcSet = [...new Map(currentReport.hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
+  for(const h of srcSet){
+    if(y>288){ doc.addPage(); y=20; }
+    doc.text(`${h.doc.title} — Rev. ${h.doc.revision} — pág. ${h.chunk.page}`, marginL+3, y); y += 5;
+  }
+
+  doc.save((currentReport.parsed.titulo || 'resumo').replace(/[^\w\- ]/g,'').slice(0,60) + '.pdf');
+}
+
+function exportReportPPTX(){
+  const pptx = new window.PptxGenJS();
+  pptx.defineLayout({ name:'AVIATOR', width:10, height:5.63 });
+  pptx.layout = 'AVIATOR';
+
+  const titleSlide = pptx.addSlide();
+  titleSlide.background = { color: '0A0D10' };
+  if(currentReport.image){
+    titleSlide.addImage({ data: 'data:'+currentReport.image.mimeType+';base64,'+currentReport.image.data, x:0, y:0, w:10, h:5.63, sizing:{type:'cover', w:10, h:5.63} });
+    titleSlide.addShape('rect', { x:0, y:0, w:10, h:5.63, fill:{color:'000000', transparency:45}, line:{type:'none'} });
+  }
+  titleSlide.addText(currentReport.parsed.titulo || 'Resumo', { x:0.5, y:2.0, w:9, h:1.3, fontSize:30, bold:true, color:'FFFFFF', align:'center' });
+  titleSlide.addText('RotorMind · FOR TRAINING AND STUDY PURPOSES ONLY', { x:0.5, y:3.3, w:9, h:0.5, fontSize:11, color:'8B95A1', align:'center' });
+
+  for(const sec of (currentReport.parsed.secoes||[])){
+    const slide = pptx.addSlide();
+    slide.background = { color: '12171C' };
+    slide.addText(sec.heading || '', { x:0.5, y:0.35, w:9, h:0.7, fontSize:22, bold:true, color:'4FA8E0' });
+    const bulletText = (sec.bullets||[]).map(b => ({ text:b, options:{ bullet:true, breakLine:true } }));
+    slide.addText(bulletText, { x:0.6, y:1.2, w:8.8, h:4, fontSize:16, color:'E4E7EA', valign:'top' });
+  }
+
+  if(currentReport.pageImages && currentReport.pageImages.length>0){
+    for(const pi of currentReport.pageImages){
+      const slide = pptx.addSlide();
+      slide.background = { color: '0A0D10' };
+      slide.addImage({ data: pi.dataUrl, x:0.8, y:0.4, w:8.4, h:4.4, sizing:{type:'contain', w:8.4, h:4.4} });
+      slide.addText(`${pi.docTitle} · Rev. ${pi.revision||'não informada'} · PDF pág. ${pi.page}`, { x:0.5, y:5.0, w:9, h:0.4, fontSize:11, color:'8B95A1', align:'center' });
+    }
+  }
+
+  const srcSet = [...new Map(currentReport.hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
+  for(let i=0;i<srcSet.length;i+=9){
+    const srcSlide=pptx.addSlide(); srcSlide.background={color:'12171C'};
+    srcSlide.addText('Fontes'+(srcSet.length>9?' · '+(Math.floor(i/9)+1):''),{x:0.5,y:0.35,w:9,h:0.7,fontSize:22,bold:true,color:'4FA8E0'});
+    const lines=srcSet.slice(i,i+9).map(h=>`${h.doc.title} · Rev. ${h.doc.revision} · PDF pág. ${h.chunk.page}`).join('\n');
+    srcSlide.addText(lines,{x:0.6,y:1.1,w:8.8,h:4.2,fontSize:12,color:'C4CCD3',valign:'top',breakLine:false,margin:0.05});
+  }
+
+  pptx.writeFile({ fileName: (currentReport.parsed.titulo || 'resumo').replace(/[^\w\- ]/g,'').slice(0,60) + '.pptx' });
+}
+
+async function previewRetrieval(){
+  const text = chatInput.value.trim();
+  if(!text) return;
+  addBubble('user', text);
+  addThinking();
+  const hits = await retrieve(text, 12);
+  removeThinking();
+
+  if(hits.length===0){
+    addBubble('assistant', '(modo teste — sem chamar a IA)\n\nNenhum trecho com essas palavras foi encontrado na biblioteca. Tente outros termos, ou verifique se o manual certo já foi adicionado em Manuals.');
+    return;
+  }
+  const preview = hits.map((h,i)=>
+    `[${i+1}] ${h.doc.title} · ${h.doc.revision} · pág. ${h.chunk.page}${h.chunk.type==='flagged'?' ⚠':''}  (score ${h.score})\n"${h.chunk.text}"`
+  ).join('\n\n');
+  addBubble('assistant', '(modo teste — sem chamar a IA, gratuito)\n\n' + preview);
+}
+
+function renderMarkdown(text){
+  try{ return marked.parse(text, {breaks:true}); }
+  catch(e){ return escapeHtml(text).replace(/\n/g,'<br>'); }
+}
+function addBubble(role, text, sourcesHtml, feedbackEventId){
+  const empty = document.getElementById('chat-empty');
+  if(empty) empty.remove();
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + role;
+  const bodyHtml = role === 'assistant' ? renderMarkdown(text) : escapeHtml(text);
+  let feedbackHtml = '';
+  if(feedbackEventId){
+    feedbackHtml = `<div class="feedback-row" data-ev="${feedbackEventId}">
+      <button class="fb-btn" data-fb="up">👍 Entendi</button>
+      <button class="fb-btn" data-fb="down">🤔 Preciso revisar</button>
+    </div>`;
+  }
+  wrap.innerHTML = `<div class="bubble">${bodyHtml}</div>` + (sourcesHtml ? `<div class="sources">${sourcesHtml}</div>` : '') + feedbackHtml;
+  chatScroll.appendChild(wrap);
+  chatScroll.scrollTop = chatScroll.scrollHeight;
+  if(feedbackEventId){
+    wrap.querySelectorAll('.fb-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        await setFeedback(feedbackEventId, btn.dataset.fb);
+        wrap.querySelectorAll('.fb-btn').forEach(b=>b.classList.remove('fb-selected'));
+        btn.classList.add('fb-selected');
+      });
+    });
+  }
+  return wrap;
+}
+function addThinking(){
+  const el = document.createElement('div');
+  el.className = 'thinking'; el.id = 'thinking-indicator';
+  el.textContent = 'consultando manuais...';
+  chatScroll.appendChild(el);
+  chatScroll.scrollTop = chatScroll.scrollHeight;
+}
+function removeThinking(){ const el = document.getElementById('thinking-indicator'); if(el) el.remove(); }
+
+/* ---------------- shared AI call (Talk + Simulator) ---------------- */
+const GEMINI_MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
+
+async function callAI(systemPrompt, messagesForApi, options={}){
+  const engine = await getEngine();
+  if(engine === 'local'){
+    if(options.attachment){ throw new Error('O motor Local não suporta anexos de imagem/PDF — troque pra Gemini em Settings.'); }
+    return await generateLocal(systemPrompt, messagesForApi);
+  }
+  const apiKey = await getApiKey();
+  if(!apiKey){ const e = new Error('NO_API_KEY'); e.code = 'NO_API_KEY'; throw e; }
+
+  const geminiContents = messagesForApi.map((m, idx) => {
+    const parts = [{ text: m.content }];
+    if(options.attachment && idx === messagesForApi.length-1 && m.role !== 'assistant'){
+      parts.push({ inlineData: { mimeType: options.attachment.mimeType, data: options.attachment.data } });
+    }
+    return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+  });
+
+  async function fetchOnce(model){
+    const body = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: geminiContents,
+      generationConfig: { maxOutputTokens: 3500 }
+    };
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(body)
+    });
+    if(!response.ok){
+      const errText = await response.text();
+      const err = new Error(`HTTP ${response.status}: ${errText.slice(0,300)}`);
+      err.status = response.status;
+      throw err;
+    }
+    return response.json();
+  }
+
+  async function callGemini(model){
+    try{
+      return await fetchOnce(model);
+    }catch(e){
+      // e.status undefined here means it's a network-level failure (e.g. "Load failed"),
+      // not an HTTP error response — worth one quick retry before giving up on this model.
+      if(e.status === undefined){
+        await new Promise(r=>setTimeout(r, 1000));
+        return await fetchOnce(model);
+      }
+      throw e;
+    }
+  }
+
+  let data, lastErr;
+  for(const model of GEMINI_MODEL_CANDIDATES){
+    try{ data = await callGemini(model); lastErr = null; break; }
+    catch(e){ lastErr = e; if(e.status !== 404 && e.status !== 429) break; }
+  }
+  if(!data) throw lastErr;
+  if(data.error){ throw new Error(data.error.message || JSON.stringify(data.error)); }
+  const cand = (data.candidates||[])[0];
+  let full = cand && cand.content && cand.content.parts ? cand.content.parts.map(p=>p.text||'').join('') : '';
+  if(!full){
+    const reason = cand ? cand.finishReason : 'sem candidatos na resposta';
+    full = `Não consegui gerar uma resposta agora (${reason||'desconhecido'}).`;
+  }
+  return full;
+}
+
+async function englishCoachClause(){
+  if(!(await getEnglishCoach())) return '';
+  return `
+
+AVIATION ENGLISH COACH (ativo):
+Se o piloto escrever em inglês, responda em inglês e corrija naturalmente erros de gramática, vocabulário ou termos aeronáuticos DENTRO da própria resposta — sem parecer aula de inglês, sem interromper o assunto principal. Exemplo de tom: "Good. A more natural way to say that would be: '...'. Now, back to..." Priorize sempre a comunicação sobre a correção: não corrija tudo, só o que atrapalha clareza ou usa termo errado de aviação. Nunca interrompa só por causa de erro pequeno.`;
+}
+
+/* ---------------- anexo (Talk) ---------------- */
+let pendingAttachment = null; // {file, kind:'image'|'pdf'}
+
+document.getElementById('chat-attach-btn').addEventListener('click', ()=>{
+  document.getElementById('chat-attach-input').click();
+});
+document.getElementById('chat-attach-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const kind = file.type === 'application/pdf' ? 'pdf' : (file.type.startsWith('image/') ? 'image' : null);
+  if(!kind){ await showAlert('Anexe um PDF ou uma imagem.'); e.target.value=''; return; }
+  pendingAttachment = { file, kind };
+  renderAttachChip();
+  e.target.value = '';
+});
+
+function renderAttachChip(){
+  const wrap = document.getElementById('chat-attach-preview');
+  if(!pendingAttachment){ wrap.style.display='none'; wrap.innerHTML=''; return; }
+  wrap.style.display = 'block';
+  const { file, kind } = pendingAttachment;
+  wrap.innerHTML = `<div class="attach-chip">
+    <span>${kind==='image'?'🖼️':'📄'}</span>
+    <span>${escapeHtml(file.name)}</span>
+    ${kind==='pdf' ? `<label style="display:flex;gap:5px;align-items:center;margin-left:10px;"><input type="checkbox" id="attach-save-lib"> salvar na biblioteca também</label>` : `<span style="color:var(--dim2);">usado só nesta pergunta</span>`}
+    <button id="attach-remove">✕</button>
+  </div>`;
+  document.getElementById('attach-remove').addEventListener('click', ()=>{ pendingAttachment=null; renderAttachChip(); });
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addPdfAttachmentToLibrary(file, chunks){
+  const r = await showModal({
+    title: 'Adicionar à biblioteca',
+    fields: [
+      { id:'title', label:'Título do documento', value: file.name.replace(/\.pdf$/i,'') },
+      { id:'aircraft', label:'Aeronave (AW139 ou S-92)', value:'AW139' },
+      { id:'category', label:'Categoria', value:'Outro' },
+      { id:'revision', label:'Revisão (opcional)', value:'' }
+    ],
+    confirmText: 'Adicionar'
+  });
+  if(!r) return;
+  const meta = { id:'doc_'+Date.now(), title: r.title.trim()||file.name, aircraft: r.aircraft.trim()||'AW139', category: r.category.trim()||'Outro', company:'', revision: r.revision.trim()||'N/A', revisionDate:'', revisionAutoDetected:false, chunkCount:chunks.length, addedAt:new Date().toISOString() };
+  await setChunks(meta.id, chunks);
+  const idx = await getIndex();
+  idx.push(meta);
+  await setIndex(idx);
+}
+
+async function sendMessage(){
+  const text = chatInput.value.trim();
+  if(!text) return;
+
+  // detecta pedido de resumo/PDF/PowerPoint e desvia pro gerador estruturado, sem sair da aba Consulta
+  const intent = parseReportRequest(text);
+  if(intent.format !== 'tela'){
+    chatInput.value=''; chatInput.style.height='auto';
+    addBubble('user', text);
+    addThinking();
+    try{
+      const report = await generateReportFromRequest(text);
+      removeThinking();
+      currentReport = report;
+      await saveReportToHistory(report);
+      addReportBubble(report);
+      if(report.format==='pptx') exportReportPPTX();
+      if(report.format==='pdf') exportReportPDF();
+    }catch(err){
+      console.error(err);
+      removeThinking();
+      addBubble('assistant', 'Erro ao gerar: ' + (err.message||String(err)));
+    }
+    return;
+  }
+
+  chatInput.value=''; chatInput.style.height='auto';
+  addBubble('user', text + (pendingAttachment ? `  📎 ${pendingAttachment.file.name}` : ''));
+  addThinking();
+
+  const hits = await retrieve(text, 12);
+
+  let attachmentForCall = null;
+  let tempAttachmentContext = '';
+  const attachment = pendingAttachment;
+  const saveCheckbox = document.getElementById('attach-save-lib');
+  const saveToLibrary = !!(saveCheckbox && saveCheckbox.checked);
+  pendingAttachment = null; renderAttachChip();
+
+  if(attachment){
+    try{
+      if(attachment.kind === 'image'){
+        const base64 = await fileToBase64(attachment.file);
+        attachmentForCall = { mimeType: attachment.file.type, data: base64 };
+      }else if(attachment.kind === 'pdf'){
+        const chunks = await extractPdf(attachment.file, ()=>{});
+        if(saveToLibrary){
+          await addPdfAttachmentToLibrary(attachment.file, chunks);
+          await renderDocs();
+        }else{
+          tempAttachmentContext = chunks.slice(0, 10).map((c,i)=>`[ANEXO ${i+1}] pág. ${c.page}: """${c.text}"""`).join('\n\n');
+        }
+      }
+    }catch(err){
+      console.error(err);
+      addBubble('assistant', 'Não consegui processar o anexo: ' + (err.message||String(err)));
+    }
+  }
+
+  removeThinking();
+
+  let contextBlock = 'Nenhum trecho relevante foi encontrado na biblioteca de manuais para esta pergunta.';
+  if(hits.length>0){
+    contextBlock = hits.map((h,i)=>
+      `[${i+1}] Documento: ${h.doc.title} | Aeronave: ${h.doc.aircraft} | Categoria: ${h.doc.category} | Revisão: ${h.doc.revision}${h.doc.revisionDate?' ('+h.doc.revisionDate+')':''} | Página: ${h.chunk.page}${h.chunk.type==='flagged'?' | contém WARNING/CAUTION/NOTE':''}\n"""${h.chunk.text}"""`
+    ).join('\n\n');
+  }
+  if(tempAttachmentContext){
+    contextBlock += `\n\nTRECHOS DO ARQUIVO ANEXADO NESTA PERGUNTA (referência pontual, não faz parte da biblioteca):\n${tempAttachmentContext}`;
+  }
+
+  const systemPrompt = `Você é o Aviator AI, um instrutor pessoal de aviação para um piloto de helicóptero (AW139/S-92, operações offshore, CHC do Brasil).
+
+REGRAS ABSOLUTAS:
+1. Responda apenas com base nos TRECHOS DE MANUAL fornecidos abaixo (e no anexo desta pergunta, se houver). Nunca invente procedimentos, limitações ou números.
+2. Se os trechos não contiverem a resposta, diga claramente: "Não encontrei essa informação nos documentos disponíveis." Não tente adivinhar.
+3. Diferencie sempre: (a) informação retirada diretamente do manual/anexo, (b) sua interpretação/explicação baseada nele, (c) conhecimento geral de aviação — deixe explícito quando sair do manual para conhecimento geral. Você não tem acesso à internet.
+4. Se houver divergência entre documentos, aponte a divergência, não a esconda.
+5. Se houver uma imagem anexada, descreva o que vê e responda com base nela, sempre deixando claro que é uma leitura visual sua, não uma citação de manual.
+5b. Se o piloto pedir "imagem"/"figura"/"diagrama" de algo: você mesmo não enxerga imagens dos manuais da biblioteca (só o texto extraído). Não diga que é impossível de forma definitiva — diga que, se o app tiver a página em imagem disponível pra esse manual específico, ela aparece automaticamente logo abaixo da sua resposta; se não aparecer nada, é porque esse manual não tem o PDF completo guardado (o piloto precisa reenviar em Manuals marcando essa opção). Continue respondendo o conteúdo em texto normalmente de qualquer forma.
+6. Seja direto e didático, tom de instrutor experiente, não robótico. Pode usar markdown (negrito, listas) pra organizar. Responda em português, a menos que o piloto pergunte em inglês.
+7. Não inclua uma seção de fontes/referências no final — isso é feito automaticamente pelo aplicativo, fora da sua resposta.
+8. PROFUNDIDADE POR PADRÃO: quando a pergunta for sobre um sistema, componente ou mensagem de alerta, não se limite ao procedimento operacional do manual. Na MESMA resposta, sem esperar o piloto perguntar de novo, inclua também: o princípio físico/mecânico de como o componente funciona por dentro, por que ele existe, e o que costuma dar errado nele — usando conhecimento geral de aviação quando o manual não detalhar isso, sempre rotulado claramente como "(conhecimento geral, fora do manual)". O piloto prefere uma resposta completa de primeira a ter que insistir em várias perguntas pra chegar no mesmo lugar.
+9. PERGUNTAS INFORMAIS COM DECISÃO: o piloto pode perguntar de forma casual e coloquial, embutindo números/condições numa frase ("teto de 500 pés e visibilidade de 1000, posso voar?"). Nesses casos: (a) extraia os valores citados, (b) compare com os mínimos/limitações relevantes encontrados nos TRECHOS DE MANUAL, (c) dê um veredito CLARO logo no início — "Sim, pode" / "Não, está abaixo do mínimo" / "Depende de X" — antes de detalhar o raciocínio, citando o valor exato do manual que embasa a decisão. Nunca responda só com o valor do limite sem dizer explicitamente se a condição informada está dentro ou fora dele.
+
+TRECHOS DE MANUAL RECUPERADOS PARA ESTA PERGUNTA:
+${contextBlock}` + await englishCoachClause();
+
+  history.push({role:'user', content:text});
+  const apiMessages = history.slice(-10);
+
+  try{
+    const full = await callAI(systemPrompt, apiMessages, { attachment: attachmentForCall });
+    let sourcesHtml = '';
+    if(hits.length>0){
+      sourcesHtml += '<div class="src-title">📚 TRECHOS CONSULTADOS</div>' +
+        hits.map(h => `<span class="src-link" data-doc="${h.doc.id}" data-page="${h.chunk.page}">${escapeHtml(h.doc.title)} · ${escapeHtml(h.doc.revision)} · pág. ${h.chunk.page}${h.chunk.type==='flagged'?' ⚠':''}</span>`).join('<br>');
+    }
+    history.push({role:'assistant', content: full});
+    const evId = await logStudyEvent(text, hits);
+    const bubbleEl = addBubble('assistant', full, sourcesHtml, hits.length>0 ? evId : null);
+    wireSourceClicks(bubbleEl);
+    const wantsImageQuery = /imagem|imagens|figura|diagrama|foto|desenho|esquema/i.test(stripAccents(text.toLowerCase()));
+    appendPageImages(bubbleEl, hits, wantsImageQuery);
+    if(wantsImageQuery){
+      const uniqueDocs = [...new Map(hits.map(h=>[h.doc.id, h.doc])).values()];
+      const statusChecks = await Promise.all(uniqueDocs.map(async d => ({ title: d.title, has: await docHasPdfBlob(d.id) })));
+      const statusLines = statusChecks.map(s => `${s.has ? '✅' : '❌'} ${s.title}`).join('<br>');
+      if(!statusChecks.some(s=>s.has)){
+        addBubble('assistant', 'ℹ️ Nenhum dos manuais usados nessa resposta tem o PDF completo guardado — por isso não tem imagem pra mostrar aqui. Status de cada um usado nessa resposta:<br>' + statusLines + '<br><br>Pra corrigir: vá em Manuals, remova o manual certo e re-suba marcando "Guardar o PDF completo" — confirme que aparece a etiqueta 🖼️ na lista depois de subir.');
+      }
+    }
+  }catch(err){
+    console.error(err);
+    if(err.code === 'NO_API_KEY'){
+      addBubble('assistant', 'Nenhuma chave de API configurada. Vá em Settings → cole sua API key do Google Gemini (aistudio.google.com/apikey) e salve, ou troque o motor pra "Local".');
+    }else{
+      addBubble('assistant', 'Erro ao consultar a IA: ' + (err.message || String(err)));
+    }
+  }
+}
+
+/* ---------------- Simulator (Fase 4) ---------------- */
+let simHistory = [];
+let simSystemPrompt = '';
+const simScroll = document.getElementById('sim-scroll');
+
+function simAddBubble(role, text){
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + role;
+  const bodyHtml = role === 'assistant' ? renderMarkdown(text) : escapeHtml(text);
+  wrap.innerHTML = `<div class="bubble">${bodyHtml}</div>`;
+  simScroll.appendChild(wrap);
+  simScroll.scrollTop = simScroll.scrollHeight;
+}
+function simAddThinking(){
+  const el = document.createElement('div');
+  el.className = 'thinking'; el.id = 'sim-thinking';
+  el.textContent = 'a situação está se desenrolando...';
+  simScroll.appendChild(el);
+  simScroll.scrollTop = simScroll.scrollHeight;
+}
+function simRemoveThinking(){ const el = document.getElementById('sim-thinking'); if(el) el.remove(); }
+
+document.getElementById('sim-start').addEventListener('click', async ()=>{
+  const aircraft = document.getElementById('sim-aircraft').value;
+  const difficulty = document.getElementById('sim-difficulty').value;
+  const type = document.getElementById('sim-type').value;
+  const custom = document.getElementById('sim-custom').value.trim();
+  const scenarioDesc = (type === 'Outro (descrever abaixo)' ? custom : type) + (custom && type !== 'Outro (descrever abaixo)' ? ' — ' + custom : '');
+  if(type === 'Outro (descrever abaixo)' && !custom){ await showAlert('Descreva o cenário no campo de texto.'); return; }
+
+  const hits = await retrieve(scenarioDesc + ' ' + aircraft + ' emergência procedimento', 6);
+  let contextBlock = 'Nenhum trecho de manual especialmente relevante foi encontrado — use conhecimento geral de aviação, deixando isso explícito.';
+  if(hits.length>0){
+    contextBlock = hits.map((h,i)=>`[${i+1}] ${h.doc.title} (Rev. ${h.doc.revision}, pág. ${h.chunk.page}): """${h.chunk.text}"""`).join('\n\n');
+  }
+
+  simSystemPrompt = `Você é um instrutor de simulador de voo para o helicóptero ${aircraft}, conduzindo um treinamento de cenário dinâmico em português.
+
+CENÁRIO SOLICITADO: ${scenarioDesc}
+NÍVEL DE DIFICULDADE: ${difficulty}
+
+MÉTODO OBRIGATÓRIO (socrático — NUNCA entregue a resposta direto):
+1. Apresente a situação inicial de forma realista e progressiva, uma informação de cada vez (ex: condições, depois um evento, depois um alerta).
+2. Antes de revelar consequências de qualquer decisão, pergunte a prioridade do piloto ("What are your priorities?" ou em português).
+3. Avalie a resposta do piloto e só então continue a narrativa, mostrando o resultado realista da decisão dele (correta ou não).
+4. Nunca dê a resposta certa antes do piloto tentar. Se ele errar, não corrija de forma seca — continue a simulação mostrando a consequência realista, e comente depois.
+5. Se os TRECHOS DE MANUAL abaixo incluírem um checklist de emergência (ECL) relevante a este cenário, use ELE como critério de certo/errado — compare passo a passo o que o piloto faz com a ordem real do checklist. Se não houver checklist disponível na biblioteca, deixe explícito que está avaliando por conhecimento geral de aviação, não pelo ECL da empresa.
+6. Mantenha o tom tenso mas profissional, como um instrutor de simulador real. Frases curtas, realistas, sem enrolação.
+7. FIM DE CENÁRIO: quando a emergência for resolvida (checklist seguido e aeronave em situação segura) OU quando a situação chegar a um desfecho de falha crítica irreversível, narre esse desfecho final normalmente e, IMEDIATAMENTE DEPOIS, em uma linha própria, no final da mensagem, escreva exatamente:
+[[CENARIO_FIM|RESULTADO=sucesso ou falha|PROCEDIMENTO=nota curta sobre aderência ao checklist|DECISAO=nota curta sobre tomada de decisão|CRM=nota curta sobre CRM e comunicação|SITUACIONAL=nota curta sobre consciência situacional]]
+Não use essa linha antes do cenário realmente ter chegado a um desfecho — enquanto a situação estiver em andamento, não a inclua de jeito nenhum.
+
+TRECHOS DE MANUAL DISPONÍVEIS PARA ESTE CENÁRIO:
+${contextBlock}
+
+Comece agora apresentando a situação inicial. Não pergunte se o piloto está pronto — comece direto na cena.` + await englishCoachClause();
+
+  simHistory = [];
+  document.getElementById('sim-setup').style.display = 'none';
+  simScroll.style.display = 'flex';
+  simScroll.innerHTML = '';
+  document.getElementById('sim-input-bar').style.display = 'block';
+  simAddThinking();
+  try{
+    const opening = await callAI(simSystemPrompt, [{role:'user', content:'(iniciar cenário)'}]);
+    simHistory.push({role:'user', content:'(iniciar cenário)'});
+    simHistory.push({role:'assistant', content: opening});
+    simRemoveThinking();
+    handleSimReply(opening);
+  }catch(err){
+    simRemoveThinking();
+    if(err.code === 'NO_API_KEY'){
+      simAddBubble('assistant', 'Nenhuma chave de API configurada. Vá em Settings.');
+    }else{
+      simAddBubble('assistant', 'Erro ao iniciar cenário: ' + (err.message||String(err)));
+    }
+  }
+});
+
+const simInput = document.getElementById('sim-input');
+simInput.addEventListener('input', ()=>{ simInput.style.height='auto'; simInput.style.height=Math.min(simInput.scrollHeight,110)+'px'; });
+simInput.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); simSendMessage(); } });
+document.getElementById('sim-send').addEventListener('click', simSendMessage);
+
+const SIM_END_RE = /\[\[CENARIO_FIM\|RESULTADO=(.*?)\|PROCEDIMENTO=(.*?)\|DECISAO=(.*?)\|CRM=(.*?)\|SITUACIONAL=(.*?)\]\]/s;
+
+function handleSimReply(reply){
+  const m = reply.match(SIM_END_RE);
+  if(!m){
+    simAddBubble('assistant', reply);
+    return;
+  }
+  const narrative = reply.slice(0, m.index).trim();
+  if(narrative) simAddBubble('assistant', narrative);
+  const [, resultado, procedimento, decisao, crm, situacional] = m;
+  const success = /sucesso/i.test(resultado.trim());
+  const color = success ? 'var(--green)' : 'var(--red)';
+  const bg = success ? '#12281B' : '#2A1416';
+  const evalCard = document.createElement('div');
+  evalCard.className = 'card';
+  evalCard.style.cssText = `border-left:3px solid ${color};background:${bg};margin-top:8px;`;
+  evalCard.innerHTML = `
+    <div style="font-family:var(--mono);font-size:11px;color:${color};margin-bottom:6px;">CENÁRIO ENCERRADO · ${success?'✅ RESOLVIDO':'🔴 FALHA CRÍTICA'}</div>
+    <div style="font-size:12.5px;margin-bottom:4px;"><b>Procedimento/Checklist:</b> ${escapeHtml(procedimento.trim())}</div>
+    <div style="font-size:12.5px;margin-bottom:4px;"><b>Tomada de decisão:</b> ${escapeHtml(decisao.trim())}</div>
+    <div style="font-size:12.5px;margin-bottom:4px;"><b>CRM/Comunicação:</b> ${escapeHtml(crm.trim())}</div>
+    <div style="font-size:12.5px;"><b>Consciência situacional:</b> ${escapeHtml(situacional.trim())}</div>
+    <button class="btn btn-primary" id="sim-new-scenario" style="width:100%;margin-top:10px;">Novo cenário</button>
+  `;
+  simScroll.appendChild(evalCard);
+  simScroll.scrollTop = simScroll.scrollHeight;
+  document.getElementById('sim-input-bar').style.display = 'none';
+  document.getElementById('sim-new-scenario').addEventListener('click', resetSimulator);
+}
+
+function resetSimulator(){
+  document.getElementById('sim-setup').style.display = 'flex';
+  simScroll.style.display = 'none';
+  document.getElementById('sim-input-bar').style.display = 'none';
+  simHistory = [];
+}
+
+async function simSendMessage(){
+  const text = simInput.value.trim();
+  if(!text) return;
+  simInput.value=''; simInput.style.height='auto';
+  simAddBubble('user', text);
+  simAddThinking();
+  simHistory.push({role:'user', content:text});
+  try{
+    const reply = await callAI(simSystemPrompt, simHistory.slice(-14));
+    simHistory.push({role:'assistant', content: reply});
+    simRemoveThinking();
+    handleSimReply(reply);
+  }catch(err){
+    simRemoveThinking();
+    simAddBubble('assistant', 'Erro: ' + (err.message||String(err)));
+  }
+}
+
+document.getElementById('sim-end').addEventListener('click', async ()=>{
+  if(!(await showConfirm('Encerrar o cenário atual?'))) return;
+  resetSimulator();
+});
+
+/* ---------------- init ---------------- */
+renderDocs();
+
+/* AVIATOR 2.1: área técnica, pesquisa segmentada e estúdio guiado.
+   Mantém IndexedDB e todas as funcionalidades do protótipo original. */
+let v2Area = localStorage.getItem('aviator-v2-area') || 'ALL';
+if(!['ALL','AW139','S-92','GERAL'].includes(v2Area)) v2Area='ALL';
+const v2BaseRetrieve = retrieve;
+const v2BaseReportRetrieve = reportRetrieve;
+function v2DocInArea(doc){
+  if(v2Area === 'ALL') return true;
+  const aircraft = String(doc.aircraft || '').toUpperCase().replace(/\s/g,'');
+  if(v2Area === 'GERAL') return !aircraft.includes('AW139') && !aircraft.includes('S-92');
+  return aircraft.includes(v2Area.replace(/\s/g,'')) || aircraft === 'GERAL' || aircraft === 'OPERAÇÕESGERAIS';
+}
+// Filtramos resultados de consulta sem alterar o índice persistido ou os documentos.
+retrieve = async function(query, topK=8){ return (await v2BaseRetrieve(query, Math.max(topK*6, 48))).filter(h=>v2DocInArea(h.doc)).slice(0,topK); };
+reportRetrieve = async function(topic, aircraft, topK){ return (await v2BaseReportRetrieve(topic, aircraft, Math.max((topK||24)*4, 60))).filter(h=>v2DocInArea(h.doc)).slice(0,topK||24); };
+function v2SetArea(area){
+  v2Area = area;
+  localStorage.setItem('aviator-v2-area',area);
+  document.querySelectorAll('.v2-air').forEach(btn=>btn.classList.toggle('active',btn.dataset.air===area));
+  const label = area==='ALL'?'todos os equipamentos':area==='GERAL'?'documentos gerais':area;
+  const status = document.getElementById('v2-studio-msg');
+  if(status) status.textContent = 'Área selecionada: '+label+'. Manuais não foram excluídos.';
+  renderDocs().catch(console.error);
+}
+document.querySelectorAll('.v2-air').forEach(btn=>btn.addEventListener('click',()=>v2SetArea(btn.dataset.air)));
+// Prévia documental: consulta exclusivamente o índice local, sem chamar Gemini nem WebLLM.
+document.getElementById('v21-preview').addEventListener('click', async ()=>{
+  const target=document.getElementById('v21-sources');
+  rmSelectedFigures.clear(); rmRenderSelectedFigures();
+  const topic=document.getElementById('v2-topic').value.trim();
+  if(!topic){target.textContent='Informe primeiro o tema.';return;}
+  target.textContent='Pesquisando fontes locais...';
+  try{
+    const aircraft=['AW139','S-92'].includes(v2Area)?v2Area:'';
+    const hits=await reportRetrieve(topic,aircraft,12);
+    if(!hits.length){target.textContent='Nenhum trecho encontrado nesta área técnica. Tente outra expressão ou confira a indexação.';return;}
+    target.innerHTML='<div style="font-size:12px;color:var(--green);margin-bottom:8px">'+hits.length+' trechos encontrados localmente. Confira as fontes antes de gerar material.</div>';
+    hits.forEach(h=>{
+      const card=document.createElement('div');
+      card.className='card';card.style.padding='10px';card.style.marginBottom='8px';
+      const title=document.createElement('div');title.style.cssText='font-size:12px;font-weight:600';
+      title.textContent=h.doc.title+' · Rev. '+(h.doc.revision||'não informada')+' · PDF pág. '+h.chunk.page;
+      const excerpt=document.createElement('div');excerpt.style.cssText='font-size:11px;color:var(--dim);margin-top:5px;line-height:1.5;white-space:pre-wrap';
+      excerpt.textContent=(h.chunk.text||'').slice(0,340);
+      card.append(title,excerpt);
+      if(h.doc.hasPdfBlob){const b=document.createElement('button');b.className='btn';b.style.cssText='margin-top:8px;font-size:11px';b.textContent='Abrir página no manual';b.addEventListener('click',()=>openPdfViewer(h.doc.id,h.chunk.page));card.appendChild(b);}
+      if(h.doc.hasPdfBlob){
+        const select=document.createElement('button');select.className='btn';select.style.cssText='margin:8px 0 0 8px;font-size:11px';select.textContent='Selecionar imagem desta página';
+        select.addEventListener('click',async()=>{
+          const key=h.doc.id+':'+h.chunk.page;
+          if(rmSelectedFigures.has(key)){rmSelectedFigures.delete(key);select.textContent='Selecionar imagem desta página';rmRenderSelectedFigures();return;}
+          select.disabled=true;select.textContent='Preparando imagem...';
+          try{const image=await renderPdfPageDataUrl(h.doc.id,h.chunk.page);if(!image)throw new Error('PDF completo indisponível');
+            rmSelectedFigures.set(key,{docId:h.doc.id,page:h.chunk.page,title:h.doc.title,revision:h.doc.revision,image});select.textContent='✓ Selecionada (toque para remover)';rmRenderSelectedFigures();
+          }catch(e){select.textContent='Falha: '+e.message;}finally{select.disabled=false;}
+        });card.appendChild(select);
+      }
+      target.appendChild(card);
+    });
+  }catch(e){target.textContent='Erro na pesquisa local: '+(e.message||e);}
+});
+v2SetArea(v2Area);
+document.getElementById('v2-create').addEventListener('click',()=>{
+  const topic = document.getElementById('v2-topic').value.trim();
+  const fmt = document.getElementById('v2-format').value;
+  const withImages = document.getElementById('v2-images').value==='yes';
+  const status = document.getElementById('v2-studio-msg');
+  if(!topic){status.textContent='Informe o assunto da aula ou apresentação.';return;}
+  const aircraft = ['AW139','S-92'].includes(v2Area)?v2Area:'';
+  const figures = [...rmSelectedFigures.values()];
+  const visualNotes = figures.length ? ' Páginas visuais selecionadas para conferência: '+figures.map(f=>f.title+' (rev. '+f.revision+', pág. '+f.page+')').join('; ')+'. Conferir as imagens diretamente nos PDFs; não afirmar que a IA recebeu as imagens.' : '';
+  const request = `Criar ${fmt==='pptx'?'apresentação PowerPoint':fmt==='pdf'?'resumo PDF':'aula estruturada'} sobre ${topic}${aircraft?' do '+aircraft:''}${withImages?' com imagens das páginas dos manuais':''}. Usar somente fontes indexadas, citar documento, revisão e página. Não inventar dados.${visualNotes}`;
+  const navBtn = document.querySelector('nav button[data-view="talk"]');
+  if(navBtn) navBtn.click();
+  const chat = document.getElementById('chat-input');
+  chat.value = request;
+  chat.focus();
+  status.textContent='Pedido preparado. As figuras selecionadas serão incluídas no PDF/PPTX quando você pedir geração com imagens; revise e toque em Enviar. O envio de trechos à IA exigirá consentimento.';
+});
+</script>
+
+<style>
+.rm-category-head{margin:15px 0 7px;padding:8px 10px;border-radius:9px;background:var(--panel2);color:var(--blue);font-weight:700;font-size:12px;border:1px solid var(--border)}
+.rm-figures{margin-top:12px;border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--panel)}
+.rm-figures h3{margin:0 0 7px;font-size:13px}.rm-muted{font-size:11px;color:var(--dim);line-height:1.5}
+.rm-figure-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:10px;margin:10px 0}
+.rm-figure-card{background:var(--panel2);border:1px solid var(--border);padding:8px;border-radius:10px;min-width:0}
+.rm-figure-card img{width:100%;height:135px;object-fit:contain;background:#fff;border-radius:5px}
+.rm-figure-card small{display:block;color:var(--dim);overflow-wrap:anywhere;font-size:10px;margin:6px 0}
+.rm-figure-card button{font-size:10px}
+</style>
+<script>
+const rmSelectedFigures=new Map();
+function rmRenderSelectedFigures(){
+ const target=document.getElementById('rm-figure-list');if(!target)return;
+ target.replaceChildren();
+ if(!rmSelectedFigures.size){const p=document.createElement('p');p.className='rm-muted';p.textContent='Nenhuma imagem selecionada.';target.appendChild(p);return;}
+ const grid=document.createElement('div');grid.className='rm-figure-grid';
+ for(const [key,f] of rmSelectedFigures){const c=document.createElement('div');c.className='rm-figure-card';const img=document.createElement('img');img.src=f.image;img.alt='Página '+f.page+' do documento '+f.title;
+ const label=document.createElement('small');label.textContent=f.title+' · Rev. '+f.revision+' · p. '+f.page;
+ const open=document.createElement('button');open.className='btn';open.textContent='Abrir PDF';open.onclick=()=>openPdfViewer(f.docId,f.page);
+ const remove=document.createElement('button');remove.className='btn';remove.textContent='Remover';remove.onclick=()=>{rmSelectedFigures.delete(key);rmRenderSelectedFigures();};
+ c.append(img,label,open,remove);grid.appendChild(c);}
+ target.appendChild(grid);
+}
+document.getElementById('rm-clear-figures').addEventListener('click',()=>{rmSelectedFigures.clear();rmRenderSelectedFigures();});
+rmRenderSelectedFigures();
+</script>
+<script>
+/* RotorMind 2.6: exportação/restauração compatível com banco original aviator_ai_db */
+(function(){
+const $=id=>document.getElementById(id), status=t=>{$('rm-backup-status').textContent=t};
+function allKeys(db){return new Promise((resolve,reject)=>{const r=db.transaction('kv','readonly').objectStore('kv').getAllKeys();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+function readKey(db,k){return new Promise((resolve,reject)=>{const r=db.transaction('kv','readonly').objectStore('kv').get(k);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+function writeKey(db,k,v){return new Promise((resolve,reject)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)})}
+async function encode(v){if(v instanceof Blob){const ab=await v.arrayBuffer();const bytes=new Uint8Array(ab);let str='';for(let i=0;i<bytes.length;i+=32768)str+=String.fromCharCode(...bytes.subarray(i,i+32768));return {kind:'blob',type:v.type,data:btoa(str)}}return {kind:'json',data:v}}
+function decode(v){if(v.kind==='blob'){const bin=atob(v.data),parts=[];for(let i=0;i<bin.length;i+=32768){const b=new Uint8Array(Math.min(32768,bin.length-i));for(let j=0;j<b.length;j++)b[j]=bin.charCodeAt(i+j);parts.push(b)}return new Blob(parts,{type:v.type||'application/pdf'})}if(v.kind==='json')return v.data;throw Error('Formato de registro desconhecido')}
+async function exportBackup(){const btn=$('rm-backup-export');btn.disabled=true;try{status('Preparando backup local...');const db=await dbPromise,keys=await allKeys(db),records={};let n=0;for(const k of keys){if(k==='api-key'||/token|secret|password/i.test(String(k)))continue;records[k]=await encode(await readKey(db,k));if(++n%10===0)status(`Exportando ${n} registros...`)}const data={format:'rotormind-backup',version:1,createdAt:new Date().toISOString(),database:'aviator_ai_db',records};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='rotormind-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);status(`Backup gerado: ${n} registros. Guarde o arquivo em local seguro.`)}catch(e){status('Falha ao exportar: '+e.message)}finally{btn.disabled=false}}
+async function importBackup(file){if(!file)return;if(file.size>500*1024*1024){alert('Backup acima de 500 MB: restaure em um computador ou divida a biblioteca.');return;}const btn=$('rm-backup-import');btn.disabled=true;try{status('Lendo e validando backup...');const data=JSON.parse(await file.text());if(data.format!=='rotormind-backup'||data.version!==1||!data.records||Array.isArray(data.records)||typeof data.records!=='object')throw Error('Arquivo não é um backup RotorMind compatível');const entries=Object.entries(data.records).filter(([k])=>k!=='api-key'&&!/token|secret|password/i.test(k));if(entries.some(([k,v])=>typeof k!=='string'||!v||!['blob','json'].includes(v.kind)))throw Error('Backup contém registros inválidos');if(!entries.length)throw Error('Backup sem registros');if(!confirm(`Restaurar ${entries.length} registros? Registros com a mesma chave serão substituídos. Faça um backup antes.`))return;const db=await dbPromise;status('Validando todos os registros antes de gravar...');const decoded=[];for(const [k,v] of entries)decoded.push([k,decode(v)]);status('Gravando em uma transação única...');await new Promise((resolve,reject)=>{const tx=db.transaction('kv','readwrite');const store=tx.objectStore('kv');for(const [k,v] of decoded)store.put(v,k);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)});const n=decoded.length;status(`Restauração concluída (${n} registros). Recarregue o aplicativo para atualizar os índices.`);alert('Backup restaurado. Recarregue o aplicativo.')}catch(e){status('Falha na restauração: '+e.message)}finally{btn.disabled=false;$('rm-backup-file').value=''}}
+async function storageHealth(){const el=$('rm-storage-health');try{if(navigator.storage?.persist){const persisted=await navigator.storage.persisted();el.textContent='Armazenamento persistente: '+(persisted?'autorizado':'não garantido')+'. Faça backups regulares.';}if(navigator.storage?.estimate){const x=await navigator.storage.estimate();const mb=n=>Math.round((n||0)/1048576);el.textContent+=' Uso estimado: '+mb(x.usage)+' MB / '+mb(x.quota)+' MB.';}}catch(e){el.textContent='Não foi possível verificar o espaço. Faça backups regulares.'}}storageHealth();
+$('rm-backup-export').addEventListener('click',exportBackup);
+$('rm-backup-import').addEventListener('click',()=>$('rm-backup-file').click());
+$('rm-backup-file').addEventListener('change',e=>importBackup(e.target.files[0]));
+})();
+</script>
+<script>
+/* RotorMind 2.7 — local diagnostics, no document contents transmitted */
+(function(){
+const btn=document.getElementById('rm-diagnostics-run');
+if(!btn)return;
+btn.addEventListener('click',async()=>{
+ const output=document.getElementById('rm-diagnostics-output');
+ output.textContent='Verificando...';
+ try{
+  const docs=await getIndex();let pages=0, chunksCount=0, withPdf=0, missingPdf=[];
+  for(const d of docs){
+   const chunks=await getChunks(d.id);chunksCount+=chunks.length;
+   pages+=new Set(chunks.map(c=>c.page||c.pageNum).filter(Boolean)).size;
+   if(await docHasPdfBlob(d.id))withPdf++;else missingPdf.push(d.title||d.name||d.id);
+  }
+  const sw=!!navigator.serviceWorker?.controller;
+  const online=navigator.onLine;
+  output.textContent=`Manuais: ${docs.length}\nPDFs completos guardados: ${withPdf}\nSem PDF completo: ${missingPdf.length}\nTrechos indexados: ${chunksCount}\nPáginas com texto indexado (aprox.): ${pages}\nService worker ativo nesta página: ${sw?'sim':'não'}\nConexão reportada: ${online?'online':'offline'}\nIA semântica por embeddings: não instalada\nBibliotecas externas offline: não garantidas`+(missingPdf.length?'\n\nSem PDF completo:\n'+missingPdf.slice(0,20).join('\n'):'');
+ }catch(e){output.textContent='Falha na verificação: '+e.message;}
+});
+})();
+</script>
+<script>
+/* RotorMind 2.9: optional CDN asset preparation; never cache manual PDFs or AI requests. */
+(function(){
+const ASSETS=[
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+'https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js',
+'https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js',
+'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+];
+const OUT=()=>document.getElementById('rm-offline-status');
+async function report(){
+ const out=OUT();if(!out)return;
+ if(!('caches' in window)){out.textContent='Cache Storage indisponível neste navegador.';return;}
+ const cache=await caches.open('rotormind-vendor-v2-8');
+ const checks=await Promise.all(ASSETS.map(async u=>!!(await cache.match(u))));
+ out.textContent=`Bibliotecas prontas: ${checks.filter(Boolean).length}/${ASSETS.length}\n`+ASSETS.map((u,i)=>(checks[i]?'✓ ':'○ ')+u.split('/').pop()).join('\n')+'\nObservação: primeira instalação exige conexão e acesso HTTPS. IA online não funciona offline.';
+}
+async function prepare(){
+ const out=OUT();if(!out)return;
+ if(!navigator.onLine){out.textContent='Conecte-se à internet para preparar o uso offline.';return;}
+ if(!('serviceWorker' in navigator)){out.textContent='Service Worker indisponível.';return;}
+ const reg=await navigator.serviceWorker.ready;
+ const worker=reg.active;if(!worker){out.textContent='Ative o aplicativo em HTTPS e recarregue a página.';return;}
+ out.textContent='Baixando bibliotecas. Aguarde…';
+ const ch=new MessageChannel();ch.port1.onmessage=e=>{const x=e.data||{};if(x.type==='progress')out.textContent=`Preparando: ${x.done}/${x.total} (${x.failed} falhas)`;if(x.type==='complete')report();};
+ worker.postMessage({type:'RM_PREPARE_VENDOR'},[ch.port2]);
+}
+window.addEventListener('DOMContentLoaded',()=>{
+ document.getElementById('rm-offline-prep')?.addEventListener('click',()=>prepare().catch(e=>OUT().textContent='Falha: '+e.message));
+ document.getElementById('rm-offline-check')?.addEventListener('click',()=>report().catch(e=>OUT().textContent='Falha: '+e.message));
+});
+})();
+</script>
+<script>
+(function(){
+ const b=document.getElementById('rm-release-check'),out=document.getElementById('rm-release-checks');
+ async function check(){
+  const https=location.protocol==='https:'||location.hostname==='localhost';
+  const sw='serviceWorker' in navigator;
+  const controlled=!!navigator.serviceWorker?.controller;
+  const db=!!window.indexedDB;
+  let storage='indisponível';
+  try {if(navigator.storage?.estimate){const x=await navigator.storage.estimate();storage=Math.round((x.usage||0)/1048576)+' MB utilizados';}}catch(e){}
+  const lines=[['HTTPS / origem segura',https],['Service Worker disponível',sw],['App controlado pelo Service Worker',controlled],['IndexedDB disponível',db]];
+  out.textContent='';for(const [name,ok] of lines){const row=document.createElement('div');row.textContent=(ok?'✓ ':'⚠ ')+name;out.appendChild(row)}
+  const row=document.createElement('div');row.textContent='Armazenamento estimado: '+storage;out.appendChild(row);
+  if(!controlled){const row=document.createElement('div');row.textContent='Se acabou de instalar, atualize a página depois de carregar pelo HTTPS.';out.appendChild(row)}
+ }
+ b?.addEventListener('click',check);check();
+})();
+</script>
+</body>
+</html>

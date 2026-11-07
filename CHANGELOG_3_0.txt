@@ -1,0 +1,1 @@
+RotorMind 3.0: diagnóstico de instalação na tela Ajustes; correção de atualização de cache do service worker; limpeza de caches antigos; guia de publicação e segurança. Mantém IndexedDB aviator_ai_db e recursos 2.9.
