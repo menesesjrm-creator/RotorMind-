@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V4.1.</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V4.2 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1785,47 +1785,60 @@ chatPreview.addEventListener('click', previewRetrieval);
 /* ---------------- Resumos cruzando manuais + exportação (PDF/PPTX) ---------------- */
 let currentReport = null;
 
+// Pesquisa do Estúdio: relevância por termos específicos, não por números isolados.
+// Mantém a seleção estritamente local até o consentimento explícito do usuário.
+function rmQueryProfile(query){
+  const raw=stripAccents(String(query||'').toLowerCase());
+  const terms=[...new Set(tokenize(query))].filter(t=>t.length>2);
+  const technical=terms.filter(t=>!/^(sistema|manual|diferenca|comparacao|imagem|figura|pagina|funcao|tecnico|estudo|radar|resumo|aula|criar|fazer|mostrar|original|sobre)$/.test(t));
+  const codes=[...new Set((raw.match(/\b(?:rdr[ -]?7000|primus[ -]?70[01]|epic[ -]?70[01]|eco[ -]?7000|aw[ -]?139|s[ -]?92)\b/g)||[]).map(x=>x.replace(/[ -]/g,'')))];
+  const radar= /radar|rdr|primus|epic|eco ?7000/.test(raw);
+  const mass=/\b(peso|massa|mtom|mtow|suplemento 90|weight)\b/.test(raw);
+  return {raw,terms,technical,codes,radar,mass};
+}
 async function reportRetrieve(topic, aircraft, topK){
-  const idx = await getIndex();
-  const filtered = aircraft ? idx.filter(d=>d.aircraft===aircraft) : idx;
-  if(filtered.length===0) return [];
-
-  if(topic && topic.trim()){
-    const qSet = expandQueryTokens(topic);
-    const scored = [];
-    for(const doc of filtered){
-      const chunks = await getChunks(doc.id);
-      for(const c of chunks){
-        const cTokens = tokenize(c.text);
-        if(cTokens.length===0) continue;
-        const freq = {}; for(const t of cTokens) freq[t]=(freq[t]||0)+1;
-        let totalFreq=0, distinctMatches=0;
-        for(const qt of qSet) if(freq[qt]){ totalFreq+=freq[qt]; distinctMatches++; }
-        if(distinctMatches===0) continue;
-        let score = (distinctMatches/qSet.size)*10 + (totalFreq/Math.sqrt(cTokens.length));
-        if(c.type==='flagged') score += 1.5;
-        scored.push({doc, chunk:c, score});
+  const idx=await getIndex();
+  const docs=aircraft?idx.filter(d=>d.aircraft===aircraft):idx;
+  if(!docs.length)return [];
+  const profile=rmQueryProfile(topic);
+  if(!profile.terms.length)return [];
+  const scored=[];
+  for(const doc of docs){
+    const title=stripAccents(String(doc.title||'').toLowerCase());
+    for(const c of await getChunks(doc.id)){
+      const body=stripAccents(String(c.text||'').toLowerCase());
+      if(!body.trim())continue;
+      const toks=tokenize(body), freq={};
+      for(const t of toks)freq[t]=(freq[t]||0)+1;
+      let hits=0,score=0,technicalHits=0;
+      for(const t of profile.terms){
+        if(freq[t]){hits++;score+=1.4+Math.min(2,Math.log2(1+freq[t]));if(profile.technical.includes(t))technicalHits++;}
       }
+      if(!hits)continue;
+      score+=4*hits/profile.terms.length;
+      if(profile.technical.length)score+=5*technicalHits/profile.technical.length;
+      for(const code of profile.codes){
+        if(body.replace(/[ -]/g,'').includes(code))score+=8;
+        if(title.replace(/[ -]/g,'').includes(code))score+=3;
+      }
+      // Impede a confusão observada: RDR 7000 (radar) != MTOM 7000 kg.
+      if(profile.radar&&!profile.mass){
+        if(/\b(mtom|mtow|extensao de (massa|peso)|suplemento 90|7000 kg|6800 kg|hover ceiling)\b/.test(body))score-=16;
+        if(/\b(mtom|mtow|extensao de (massa|peso)|suplemento 90|7000 kg)\b/.test(title))score-=12;
+        if(!/radar|primus|rdr|weather radar|autotilt|tilt|antenna|rta/.test(body+' '+title))score-=5;
+      }
+      if(score>2)scored.push({doc,chunk:c,score});
     }
-    scored.sort((a,b)=>b.score-a.score);
-    return scored.slice(0, topK);
   }
-
-  // sem tema: resumo geral — amostra espalhada por página em cada manual, priorizando WARNING/CAUTION/NOTE
-  const perDoc = Math.max(2, Math.floor(topK / filtered.length));
-  const result = [];
-  for(const doc of filtered){
-    const chunks = await getChunks(doc.id);
-    if(chunks.length===0) continue;
-    const flagged = chunks.filter(c=>c.type==='flagged');
-    const rest = chunks.filter(c=>c.type!=='flagged');
-    const picked = [];
-    const step = Math.max(1, Math.floor(rest.length / perDoc));
-    for(let i=0; i<rest.length && picked.length<perDoc; i+=step) picked.push(rest[i]);
-    const combined = [...flagged.slice(0, Math.ceil(perDoc/2)), ...picked].slice(0, perDoc);
-    for(const c of combined) result.push({doc, chunk:c, score:0});
+  scored.sort((a,b)=>b.score-a.score);
+  const selected=[],counts={},seen=new Set();
+  for(const h of scored){
+    const key=h.doc.id+':'+h.chunk.page;
+    if(seen.has(key)|| (counts[h.doc.id]||0)>=Math.max(2,Math.ceil(topK/2)))continue;
+    selected.push(h);seen.add(key);counts[h.doc.id]=(counts[h.doc.id]||0)+1;
+    if(selected.length>=topK)break;
   }
-  return result.slice(0, topK);
+  return selected;
 }
 
 function parseReportRequest(raw){
@@ -1874,7 +1887,7 @@ async function generateImageForReport(titulo, topic, aircraft){
 
 async function generateReportFromRequest(rawRequest){
   const { format, aircraft, wantsImages, topic } = parseReportRequest(rawRequest);
-  const hits = await reportRetrieve(topic, aircraft, 24);
+  const hits = await reportRetrieve(topic, aircraft, 12);
   if(hits.length===0){
     throw new Error('Nenhum manual encontrado' + (aircraft?' para '+aircraft:'') + '. Adicione manuais em Manuals primeiro.');
   }
@@ -1883,45 +1896,51 @@ async function generateReportFromRequest(rawRequest){
   const approved = await showModal({title:'Autorização de envio de fontes', message:'Para gerar este material com Gemini, trechos dos manuais recuperados serão enviados ao Google. NÃO prossiga com documentos confidenciais ou sem autorização expressa. Deseja autorizar este envio específico?', confirmText:'Autorizo este envio', cancelText:'Cancelar'});
   if(!approved) throw new Error('Geração cancelada: os trechos dos manuais não foram enviados.');
 
-  const sectionLimit = topic && topic.trim() ? '3 a 8 seções, cada uma com 3 a 6 bullets' : '3 a 5 seções, cada uma com 3 a 5 bullets (resumo geral — seja mais conciso, sem tema específico pra focar)';
-  const contextBlock = hits.map((h,i)=>`[${i+1}] ${h.doc.title} (${h.doc.aircraft}, Rev. ${h.doc.revision}, pág. ${h.chunk.page}): """${(typeof h.chunk.text==='string'?h.chunk.text:'').slice(0,(window.__rmLocalMode?500:1800))}"""`).join('\n\n');
+  const sectionLimit = topic && topic.trim() ? '3 a 5 seções, cada uma com 2 a 4 bullets' : '2 a 4 seções, cada uma com 2 a 3 bullets (resumo geral — seja mais conciso, sem tema específico pra focar)';
+  const contextBlock = hits.map((h,i)=>`[${i+1}] ${h.doc.title} (${h.doc.aircraft}, Rev. ${h.doc.revision}, pág. ${h.chunk.page}): """${(typeof h.chunk.text==='string'?h.chunk.text:'').slice(0,650)}"""`).join('\n\n');
   const prompt = `Você é um especialista em documentação técnica de aviação. Gere um resumo técnico estruturado sobre "${topic || 'visão geral dos manuais disponíveis'}"${aircraft ? ' para o '+aircraft : ''}, usando APENAS os trechos de manual abaixo. Nunca invente números, limitações ou procedimentos.
 
 Responda SOMENTE com JSON válido, sem markdown e sem texto fora do JSON, neste formato exato:
 {"titulo":"...", "secoes":[{"heading":"...","bullets":["...","..."]}]}
 
-Regras: ${sectionLimit}, bullets curtos e objetivos (uma frase cada), técnicos. Inclua números/limitações exatos quando existirem nos trechos. Se algo relevante para o tema não estiver nos trechos fornecidos, adicione uma seção final "Lacunas" explicando o que não foi encontrado na biblioteca.
+Regras obrigatórias: mantenha o escopo EXATO do pedido, não acrescente temas correlatos que compartilham apenas um número ou palavra. Exemplo: radar RDR-7000 NÃO é extensão de massa de 7000 kg. Se o usuário solicitar comparação, organize as seções por equipamento e inclua uma seção de diferenças verificáveis; quando faltar evidência, declare a lacuna. Vincule cada afirmação ao documento e à página correspondente no próprio bullet. Não atribua informações a fontes não presentes nos trechos. ${sectionLimit}, bullets curtos e objetivos (uma frase cada), técnicos. Inclua números/limitações exatos quando existirem nos trechos. Se algo relevante para o tema não estiver nos trechos fornecidos, adicione uma seção final "Lacunas" explicando o que não foi encontrado na biblioteca.
 
 TRECHOS DE MANUAL:
 ${contextBlock}`;
 
-  // Geração resiliente: tentar resposta estruturada curta antes de falhar.
-  let parsed=null, lastErr=null;
-  for(let attempt=0;attempt<3 && !parsed;attempt++){
-    const compact = attempt>0;
-    const attemptPrompt = compact ? prompt.replace(sectionLimit, '2 a 4 seções, 2 a 3 bullets curtos por seção') + '\nIMPORTANTE: resposta compacta, JSON completo, sem comentários.' : prompt;
-    for(const model of GEMINI_MODEL_CANDIDATES){
-      try{
-        const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
-          method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-          body:JSON.stringify({contents:[{role:'user',parts:[{text:attemptPrompt}]}],generationConfig:{maxOutputTokens:compact?3500:6000,responseMimeType:'application/json'}})
-        });
-        if(!resp.ok){const e=new Error('HTTP '+resp.status+': '+(await resp.text()).slice(0,180));e.status=resp.status;throw e;}
-        const data=await resp.json();
-        const cand=(data.candidates||[])[0];
-        const raw=(cand?.content?.parts||[]).map(x=>x.text||'').join('').trim();
-        if(cand?.finishReason==='MAX_TOKENS') throw new Error('Limite de resposta atingido');
-        const start=raw.indexOf('{'),end=raw.lastIndexOf('}');
-        if(start<0||end<start)throw new Error('Resposta sem JSON completo');
-        const result=JSON.parse(raw.slice(start,end+1));
-        if(typeof result.titulo!=='string'||!Array.isArray(result.secoes)||!result.secoes.length||!result.secoes.every(x=>typeof x.heading==='string'&&Array.isArray(x.bullets)&&x.bullets.every(b=>typeof b==='string')))throw new Error('Estrutura de resumo inválida');
-        parsed=result;lastErr=null;break;
-      }catch(e){lastErr=e;console.warn('Tentativa de geração',attempt+1,model,e.message);if(e.status===401||e.status===403)throw e;}
-    }
+  let data, lastErr;
+  for(const model of GEMINI_MODEL_CANDIDATES){
+    try{
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+        body: JSON.stringify({ contents:[{role:'user', parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:3500, responseMimeType:'application/json'} })
+      });
+      if(!resp.ok){ const errText = await resp.text(); const e=new Error('HTTP '+resp.status+': '+errText.slice(0,200)); e.status=resp.status; throw e; }
+      data = await resp.json(); lastErr=null; break;
+    }catch(e){ lastErr=e; if(e.status!==404 && e.status!==429) break; }
   }
-  if(!parsed)throw new Error('Não foi possível concluir a geração após novas tentativas: '+(lastErr?.message||'resposta inválida'));
+  if(!data) throw lastErr;
+  if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  const cand = (data.candidates||[])[0];
+  const raw = cand && cand.content && cand.content.parts ? cand.content.parts.map(p=>p.text||'').join('') : '';
+  if(cand && cand.finishReason === 'MAX_TOKENS'){
+    throw new Error('A resposta ficou grande demais e foi cortada no meio. Tente um pedido com tema mais específico (ex: "resumo do sistema hidráulico" em vez de um resumo geral de tudo).');
+  }
+  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
+  let parsed;
+  try{
+    if(start===-1 || end===-1) throw new Error('resposta vazia ou sem JSON');
+    parsed = JSON.parse(raw.slice(start, end+1));
+  }catch(parseErr){
+    throw new Error('Resposta da IA fora do formato esperado. O pedido foi limitado para reduzir cortes; tente novamente ou divida o assunto.');
+  }
+  if(!parsed || !Array.isArray(parsed.secoes) || !parsed.secoes.length){
+    throw new Error('A IA não forneceu seções válidas. Confira o modo de IA e tente novamente.');
+  }
+  parsed.secoes = parsed.secoes.map(sec=>({heading:String(sec.heading||sec.titulo||'Seção'),bullets:(Array.isArray(sec.bullets)?sec.bullets:[]).map(x=>String(x)).slice(0,8)}));
+  // Ilustração sintética opcional: nunca substituir a figura original sem identificá-la.
   let image = null;
-  if(wantsImages){ image = await generateImageForReport(parsed.titulo, topic, aircraft); }
+  if(wantsImages && window.__rmAllowGeneratedCover === true){ image = await generateImageForReport(parsed.titulo, topic, aircraft); }
 
   // Preferir figuras aprovadas pelo usuário, sem enviar imagens à IA externa.
   // Evitar renderização automática de dezenas de páginas e consumo excessivo de memória no iPad.
@@ -1933,6 +1952,19 @@ ${contextBlock}`;
     }
   }
 
+  if(wantsImages && pageImages.length===0){
+    const seen=new Set();
+    for(const h of hits){
+      if(pageImages.length>=3) break;
+      const key=h.doc.id+':'+h.chunk.page;
+      if(seen.has(key)) continue;
+      seen.add(key);
+      try{
+        const img=await renderPdfPageDataUrl(h.doc.id,h.chunk.page);
+        if(img) pageImages.push({dataUrl:img,docTitle:h.doc.title,revision:h.doc.revision||'não informada',page:h.chunk.page,approved:false});
+      }catch(e){ console.warn('Página original indisponível',key,e); }
+    }
+  }
   return { parsed, hits, format, aircraft, topic, wantsImages, image, pageImages };
 }
 
@@ -1974,7 +2006,7 @@ function addReportBubble(report){
   wrap.style.maxWidth = '95%';
   wrap.innerHTML = `<div class="bubble">
     <div style="font-weight:600;font-size:14px;margin-bottom:8px;">${escapeHtml(parsed.titulo||'Resumo')}</div>
-    ${image ? `<img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;margin-bottom:10px;">` : (wantsImages ? `<div style="font-size:12px;color:var(--red);margin-bottom:8px;">⚠️ Não consegui gerar a imagem dessa vez (tente de novo).</div>` : '')}
+    ${image ? `<img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;margin-bottom:10px;">` : (wantsImages && !pageImages.length ? `<div style="font-size:12px;color:var(--dim);margin-bottom:8px;">Não foi possível obter páginas ilustradas dos PDFs locais.</div>` : '')}
     ${(parsed.secoes||[]).map(sec=>`<div style="margin-bottom:10px;"><div style="font-weight:600;font-size:12.5px;color:var(--blue);margin-bottom:4px;">${escapeHtml(sec.heading||'')}</div><ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.6;">${(sec.bullets||[]).map(b=>`<li>${escapeHtml(b)}</li>`).join('')}</ul></div>`).join('')}
   </div>
   ${pageImages && pageImages.length>0 ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-top:8px;padding-bottom:4px;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div>` : ''}
@@ -2071,7 +2103,7 @@ function exportReportPDF(){
   if(currentReport.pageImages && currentReport.pageImages.length>0){
     for(const pi of currentReport.pageImages){
       doc.addPage(); y=18;
-      doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text('Figura selecionada do manual', marginL, y); y+=9;
+      doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text('Página original do manual (verifique a fonte)', marginL, y); y+=9;
       try{
         const props=doc.getImageProperties(pi.dataUrl);
         const usableH=242;
@@ -2111,7 +2143,7 @@ function exportReportPPTX(){
     titleSlide.addShape('rect', { x:0, y:0, w:10, h:5.63, fill:{color:'000000', transparency:45}, line:{type:'none'} });
   }
   titleSlide.addText(currentReport.parsed.titulo || 'Resumo', { x:0.5, y:2.0, w:9, h:1.3, fontSize:30, bold:true, color:'FFFFFF', align:'center' });
-  titleSlide.addText('RotorMind 4.1 · FOR TRAINING AND STUDY PURPOSES ONLY', { x:0.5, y:3.3, w:9, h:0.5, fontSize:11, color:'8B95A1', align:'center' });
+  titleSlide.addText('RotorMind · FOR TRAINING AND STUDY PURPOSES ONLY', { x:0.5, y:3.3, w:9, h:0.5, fontSize:11, color:'8B95A1', align:'center' });
 
   for(const sec of (currentReport.parsed.secoes||[])){
     const slide = pptx.addSlide();
@@ -2409,7 +2441,7 @@ async function rmSendMessageCore(){
   let contextBlock = 'Nenhum trecho relevante foi encontrado na biblioteca de manuais para esta pergunta.';
   if(hits.length>0){
     contextBlock = hits.map((h,i)=>
-      `[${i+1}] Documento: ${h.doc.title} | Aeronave: ${h.doc.aircraft} | Categoria: ${h.doc.category} | Revisão: ${h.doc.revision}${h.doc.revisionDate?' ('+h.doc.revisionDate+')':''} | Página: ${h.chunk.page}${h.chunk.type==='flagged'?' | contém WARNING/CAUTION/NOTE':''}\n"""${(typeof h.chunk.text==='string'?h.chunk.text:'').slice(0,(window.__rmLocalMode?500:1800))}"""`
+      `[${i+1}] Documento: ${h.doc.title} | Aeronave: ${h.doc.aircraft} | Categoria: ${h.doc.category} | Revisão: ${h.doc.revision}${h.doc.revisionDate?' ('+h.doc.revisionDate+')':''} | Página: ${h.chunk.page}${h.chunk.type==='flagged'?' | contém WARNING/CAUTION/NOTE':''}\n"""${(typeof h.chunk.text==='string'?h.chunk.text:'').slice(0,650)}"""`
     ).join('\n\n');
   }
   if(tempAttachmentContext){
@@ -2514,7 +2546,7 @@ document.getElementById('sim-start').addEventListener('click', async ()=>{
   const hits = await retrieve(scenarioDesc + ' ' + aircraft + ' emergência procedimento', 6);
   let contextBlock = 'Nenhum trecho de manual especialmente relevante foi encontrado — use conhecimento geral de aviação, deixando isso explícito.';
   if(hits.length>0){
-    contextBlock = hits.map((h,i)=>`[${i+1}] ${h.doc.title} (Rev. ${h.doc.revision}, pág. ${h.chunk.page}): """${(typeof h.chunk.text==='string'?h.chunk.text:'').slice(0,(window.__rmLocalMode?500:1800))}"""`).join('\n\n');
+    contextBlock = hits.map((h,i)=>`[${i+1}] ${h.doc.title} (Rev. ${h.doc.revision}, pág. ${h.chunk.page}): """${(typeof h.chunk.text==='string'?h.chunk.text:'').slice(0,650)}"""`).join('\n\n');
   }
 
   simSystemPrompt = `Você é um instrutor de simulador de voo para o helicóptero ${aircraft}, conduzindo um treinamento de cenário dinâmico em português.
@@ -2696,24 +2728,21 @@ document.getElementById('v2-create').addEventListener('click',async()=>{
   const fmt=document.getElementById('v2-format').value;
   const withImages=document.getElementById('v2-images').value==='yes';
   const status=document.getElementById('v2-studio-msg');
-  const button=document.getElementById('v2-create');
   if(!topic){status.textContent='Informe o assunto da aula ou apresentação.';return;}
-  if(button.disabled)return;
   const aircraft=['AW139','S-92'].includes(v2Area)?v2Area:'';
-  const request=`Criar ${fmt==='pptx'?'apresentação PowerPoint':fmt==='pdf'?'resumo PDF':'aula estruturada'} sobre ${topic}${aircraft?' do '+aircraft:''}${withImages?' com imagens das páginas dos manuais':''}. Usar somente fontes indexadas, citar documento, revisão e página. Não inventar dados.`;
-  button.disabled=true;button.textContent='Gerando material…';
-  status.textContent='Consultando fontes e gerando no Estúdio. Não feche esta página.';
+  const btn=document.getElementById('v2-create');btn.disabled=true;
+  status.textContent='Preparando material no Estúdio. Não feche esta página...';
   try{
+    const request=`Criar ${fmt==='pptx'?'apresentação PowerPoint':fmt==='pdf'?'resumo PDF':'aula estruturada'} sobre ${topic}${aircraft?' do '+aircraft:''}${withImages?' com imagens das páginas dos manuais':''}. Usar somente fontes indexadas, citar documento, revisão e página. Não inventar dados.`;
     const report=await generateReportFromRequest(request);
     currentReport=report;
     await saveReportToHistory(report);
-    if(fmt==='pptx'){status.textContent='Apresentação gerada. Preparando download…';await exportReportPPTX();}
-    else if(fmt==='pdf'){status.textContent='PDF gerado. Preparando download…';await exportReportPDF();}
-    else {status.textContent='Aula gerada. Consulte o histórico de materiais.';}
-    if(withImages && !report.pageImages.length)status.textContent+=' Nenhuma figura original selecionada: use a pesquisa de figuras do Estúdio e selecione as páginas desejadas.';
-    await renderReportHistory();
-  }catch(e){console.error(e);status.textContent='Falha na geração: '+(e.message||e);}
-  finally{button.disabled=false;button.textContent='Gerar material';}
+    renderReport();
+    status.textContent='Material criado no Estúdio. Revise o conteúdo e use os botões de exportação abaixo.';
+    if(fmt==='pdf') exportReportPDF();
+    if(fmt==='pptx') await exportReportPPTX();
+  }catch(e){console.error(e);status.textContent='Falha ao gerar: '+(e.message||e);}
+  finally{btn.disabled=false;}
 });
 </script>
 

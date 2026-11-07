@@ -1,1 +1,8 @@
-RotorMind 4.1 beta — correções incrementais\n- Estúdio gera diretamente sem redirecionar para Consulta.\n- Geração estruturada com validação JSON e até três tentativas, com resposta compacta.\n- Status e prevenção de duplo clique durante geração.\n- Cache PWA versionado.\n- Imagens originais continuam dependendo de seleção explícita de páginas e PDF guardado.\n- Não houve teste real no Safari/iPad nem auditoria de segurança completa.\n
+RotorMind 4.1 Beta — correções de Estúdio e exportação
+- Botão Criar do Estúdio gera diretamente no Estúdio, sem redirecionar para o chat.
+- Contexto reduzido para diminuir erros de JSON/truncamento.
+- Inclusão automática de até 3 páginas originais de PDFs locais recuperados, se disponíveis.
+- Imagens não são enviadas à IA; consentimento de trechos continua obrigatório para Gemini.
+- PDFs devem permanecer no armazenamento local do mesmo domínio; não há garantia de funcionamento no iPad sem teste real.
+- Não inclui figuras geradas por IA automaticamente.
+- Faça backup antes de atualizar.
