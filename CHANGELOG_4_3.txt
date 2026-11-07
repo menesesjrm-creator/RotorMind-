@@ -1,0 +1,1 @@
+RotorMind 4.3 Beta: Estúdio pesquisa independentemente do filtro de navegação; detecta AW139/S-92 no tema; exclui falsos positivos de extensão de massa em buscas de radar; bloqueia exportação solicitada com imagens quando nenhuma página original foi renderizada. Teste no Safari/iPad pendente. Não publicar manuais nem chaves.

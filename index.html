@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V4.2 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V4.3 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1815,6 +1815,8 @@ async function reportRetrieve(topic, aircraft, topK){
         if(freq[t]){hits++;score+=1.4+Math.min(2,Math.log2(1+freq[t]));if(profile.technical.includes(t))technicalHits++;}
       }
       if(!hits)continue;
+      // Rejeitar falsos positivos de massa quando a consulta é de radar.
+      if(profile.radar && !profile.mass && /\b(7000\s*kg|6800\s*kg|mtom|mtow|suplemento\s*90|mass extension|weight extension|hover ceiling)\b/i.test(body) && !/\b(radar|primus|rdr[- ]?7000|weather radar|autotilt|antenna|rta)\b/i.test(body)) continue;
       score+=4*hits/profile.terms.length;
       if(profile.technical.length)score+=5*technicalHits/profile.technical.length;
       for(const code of profile.codes){
@@ -1889,7 +1891,7 @@ async function generateReportFromRequest(rawRequest){
   const { format, aircraft, wantsImages, topic } = parseReportRequest(rawRequest);
   const hits = await reportRetrieve(topic, aircraft, 12);
   if(hits.length===0){
-    throw new Error('Nenhum manual encontrado' + (aircraft?' para '+aircraft:'') + '. Adicione manuais em Manuals primeiro.');
+    throw new Error('Nenhuma fonte pertinente encontrada. Confira a Biblioteca, a indexação e o filtro de área técnica. Não é necessário importar os PDFs novamente antes de verificar os filtros.');
   }
   const apiKey = await getApiKey();
   if(!apiKey){ throw new Error('Configure a API key do Gemini em Settings antes de gerar.'); }
@@ -1964,6 +1966,9 @@ ${contextBlock}`;
         if(img) pageImages.push({dataUrl:img,docTitle:h.doc.title,revision:h.doc.revision||'não informada',page:h.chunk.page,approved:false});
       }catch(e){ console.warn('Página original indisponível',key,e); }
     }
+  }
+  if(wantsImages && pageImages.length===0){
+    throw new Error('O conteúdo foi preparado, mas nenhuma página original pôde ser renderizada. Para evitar exportação sem imagens, verifique se os PDFs completos estão salvos localmente e selecione páginas em Ver fontes antes de criar.');
   }
   return { parsed, hits, format, aircraft, topic, wantsImages, image, pageImages };
 }
@@ -2675,7 +2680,11 @@ function v2DocInArea(doc){
 }
 // Filtramos resultados de consulta sem alterar o índice persistido ou os documentos.
 retrieve = async function(query, topK=8){ return (await v2BaseRetrieve(query, Math.max(topK*6, 48))).filter(h=>v2DocInArea(h.doc)).slice(0,topK); };
-reportRetrieve = async function(topic, aircraft, topK){ return (await v2BaseReportRetrieve(topic, aircraft, Math.max((topK||24)*4, 60))).filter(h=>v2DocInArea(h.doc)).slice(0,topK||24); };
+reportRetrieve = async function(topic, aircraft, topK){
+  // Estúdio usa o equipamento indicado no tema; filtro de navegação não deve ocultar fontes.
+  const queryAircraft = aircraft || (/\b(?:AW[ -]?139|A139)\b/i.test(topic)?'AW139':/\bS[ -]?92\b/i.test(topic)?'S-92':'');
+  return (await v2BaseReportRetrieve(topic, queryAircraft, Math.max((topK||24)*4, 60))).slice(0,topK||24);
+};
 function v2SetArea(area){
   v2Area = area;
   localStorage.setItem('aviator-v2-area',area);
