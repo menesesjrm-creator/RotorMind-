@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V4.7 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V4.8 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1916,15 +1916,25 @@ async function generateReportFromRequest(rawRequest){
   const allEvidence=[];
   const addEvidence=(h)=>{if(!allEvidence.some(x=>x.doc.id===h.doc.id&&x.chunk.page===h.chunk.page))allEvidence.push(h);};
   hits.forEach(addEvidence);
+  // Comparações exigem evidências de AMBOS os lados; uma busca conjunta tende a
+  // privilegiar o manual com mais ocorrências de termos (ex.: RDR-7000).
+  const comparisonSides=isRadarComparison?[
+    {name:'Primus P701',query:'AW139 P701 Primus 701 beacon weather radar tilt control panel storm intensity'},
+    {name:'RDR-7000',query:'AW139 RDR-7000 vertical buffer real beam maritime WX PATH GMAP2'}
+  ]:[];
+  for(const side of comparisonSides){
+    const sideHits=await reportRetrieve(side.query,aircraft,8);
+    sideHits.forEach(addEvidence);
+  }
   async function requestChapter(chapter, evidence){
-    const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,1050)}`).join('\n\n');
-    const prompt=`Você é editor técnico aeronáutico. Crie SOMENTE o capítulo "${chapter.name}" de um material sobre "${topic}". Baseie-se EXCLUSIVAMENTE nas fontes numeradas. Explique diferenças operacionais concretas entre equipamentos, sempre que as fontes permitirem. Para cada fato técnico, cite [F1] etc., exatamente como aparece na lista. Não confunda RDR-7000 com peso 7000 kg. Diferencie modos e configurações; não atribua recursos de uma configuração a todas. Se uma informação não estiver nas fontes, diga explicitamente "não confirmado nos trechos consultados". Não invente especificações. Não cite um documento que não esteja abaixo. Responda APENAS JSON válido no formato {"titulo":"...","secoes":[{"heading":"...","bullets":["..."]}]}. Faça UMA seção com 3 a 5 bullets explicativos, preferencialmente com contraste A versus B. FONTES:\n${citations}`;
+    const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,1500)}`).join('\n\n');
+    const prompt=`Você é editor técnico aeronáutico. Crie SOMENTE o capítulo "${chapter.name}" de um material sobre "${topic}". Baseie-se EXCLUSIVAMENTE nas fontes numeradas. Explique diferenças operacionais concretas entre equipamentos, sempre que as fontes permitirem. Para cada fato técnico, cite [F1] etc., exatamente como aparece na lista. Não confunda RDR-7000 com peso 7000 kg. Diferencie modos e configurações; não atribua recursos de uma configuração a todas. Se uma informação não estiver nas fontes, diga explicitamente "não confirmado nos trechos consultados". Não invente especificações. Não cite um documento que não esteja abaixo. Responda APENAS JSON válido no formato {"titulo":"...","secoes":[{"heading":"...","bullets":["..."]}]}. Faça UMA seção com 4 a 6 bullets detalhados. Para cada aspecto: descreva P701, RDR-7000, diferença operacional e ressalva da configuração. Não use índice remissivo como prova técnica. Se faltar fonte de um lado, indique a lacuna sem inventar. FONTES:\n${citations}`;
     let last;
     for(const model of GEMINI_MODEL_CANDIDATES){
       try{
         const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
           method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:2300,responseMimeType:'application/json'}})
+          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:3800,responseMimeType:'application/json'}})
         });
         if(!resp.ok){const e=new Error('HTTP '+resp.status);e.status=resp.status;throw e;}
         const data=await resp.json(),candidate=(data.candidates||[])[0];
@@ -1946,17 +1956,28 @@ async function generateReportFromRequest(rawRequest){
   const sections=[],chapterErrors=[];
   for(const chapter of chapters){
     const targeted=await reportRetrieve(chapter.query,aircraft,8);
-    const evidence=(targeted.length?targeted:hits).slice(0,6);
+    const pool=[...targeted,...allEvidence];
+    const unique=[...new Map(pool.map(h=>[h.doc.id+':'+h.chunk.page,h])).values()];
+    const p701=unique.filter(h=>/\b(?:P701|Primus[ -]?701|WR[- ]?701)\b/i.test(h.doc.title+' '+h.chunk.text));
+    const rdr=unique.filter(h=>/\b(?:RDR[- ]?7000|ART[- ]?7000)\b/i.test(h.doc.title+' '+h.chunk.text));
+    const evidence=isRadarComparison?[...p701.slice(0,3),...rdr.filter(h=>!p701.includes(h)).slice(0,3),...unique.filter(h=>!p701.includes(h)&&!rdr.includes(h)).slice(0,2)].slice(0,8):unique.slice(0,8);
     evidence.forEach(addEvidence);
     try{sections.push(await requestChapter(chapter,evidence));}
     catch(err){
       chapterErrors.push(chapter.name+': '+String(err.message||err));
-      sections.push({heading:chapter.name+' — fontes para revisão',bullets:evidence.slice(0,3).map(h=>
-        'Extrato documental (não é conclusão da IA): '+String(h.chunk.text||'').replace(/\s+/g,' ').slice(0,240)+`… [${h.doc.title}, Rev. ${h.doc.revision||'não informada'}, PDF pág. ${h.chunk.page}]`)});
+      // Não mascarar falha de IA com trechos de índice apresentados como análise.
+      sections.push({heading:chapter.name+' — análise indisponível',bullets:[
+        'Esta seção não foi concluída. Nenhuma comparação foi inferida a partir de trechos isolados.',
+        'Confira as fontes específicas na bibliografia e tente novamente quando a IA estiver disponível.'
+      ]});
     }
   }
   const parsed={titulo:(isComparison?'Comparação técnica: ':'Estudo técnico: ')+topic,secoes:sections};
-  if(chapterErrors.length)parsed.secoes.push({heading:'Capítulos que exigem revisão',bullets:chapterErrors.map(x=>'Geração parcial: '+x)});
+  if(chapterErrors.length)parsed.secoes.push({heading:'Transparência da geração',bullets:chapterErrors.map(x=>'Não concluído: '+x)});
+  // Impedir a exportação enganosa de um documento apresentado como completo.
+  if(chapterErrors.length){
+    throw new Error('Comparação incompleta: '+chapterErrors.length+' de '+chapters.length+' capítulos falharam. Nenhum PDF parcial foi salvo. '+chapterErrors.map(x=>x.slice(0,90)).join(' | '));
+  }
   // Incluir na bibliografia todas as fontes realmente pesquisadas por capítulo.
   hits.splice(0,hits.length,...allEvidence.slice(0,32));
   parsed.secoes = parsed.secoes.map(sec=>({heading:String(sec.heading||sec.titulo||'Seção'),bullets:(Array.isArray(sec.bullets)?sec.bullets:[]).map(x=>String(x)).slice(0,8)}));
@@ -2084,14 +2105,15 @@ function renderReport(){
       </div>
     </div>
     ${image ? `<div class="card"><h3>Ilustração gerada por IA (não é figura do manual)</h3><img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;"></div>` : ''}
-    ${wantsImages && pageImages && pageImages.length ? `<div style="font-size:12px;color:var(--green);margin:4px 0 10px;">✓ ${pageImages.length} página(s) original(is) dos manuais incorporada(s). A geração de capa por IA é opcional e independente.</div>` : ''}
-    ${pageImages && pageImages.length>0 ? `<div class="card"><h3>Páginas originais dos manuais (confira as figuras)</h3><div style="display:flex;gap:8px;overflow-x:auto;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);cursor:pointer;" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div></div>` : ''}
-    ${(parsed.secoes||[]).map(sec => `
+    ${wantsImages && pageImages && pageImages.length ? `<div style="font-size:12px;color:var(--green);margin:4px 0 10px;">✓ ${pageImages.length} fonte(s) visual(is) incorporada(s) à análise e aos arquivos. A geração de capa por IA é opcional e independente.</div>` : ''}
+    ${pageImages && pageImages.length>0 ? `<div class="card"><h3>Fontes visuais originais — amplie e confira</h3><div style="display:flex;gap:8px;overflow-x:auto;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);cursor:pointer;" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div></div>` : ''}
+    ${(parsed.secoes||[]).map((sec,idx) => `
       <div class="card">
         <h3>${escapeHtml(sec.heading||'')}</h3>
         <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;">
           ${(sec.bullets||[]).map(b=>`<li>${escapeHtml(b)}</li>`).join('')}
         </ul>
+        ${pageImages&&pageImages.length?(()=>{const pi=pageImages[idx%pageImages.length];return `<div style="display:grid;grid-template-columns:minmax(130px,240px) 1fr;gap:14px;align-items:center;margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;"><img src="${pi.dataUrl}" alt="Figura da fonte" style="width:100%;max-height:240px;object-fit:contain;background:white;border-radius:5px;cursor:zoom-in" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-size:12px;line-height:1.6"><b>Fonte visual para conferir</b><div>${escapeHtml(pi.docTitle)} · Rev. ${escapeHtml(pi.revision)} · PDF pág. ${pi.page}</div><small>Imagem original; a relação com esta seção exige conferência. Toque para ampliar.</small></div></div>`;})():''}
       </div>`).join('')}
     <div class="card">
       <h3>Fontes</h3>
@@ -2148,6 +2170,19 @@ function exportReportPDF(){
       }
     }
     y += 4;
+    const images=currentReport.pageImages||[];
+    if(images.length){
+      const pi=images[(currentReport.parsed.secoes||[]).indexOf(sec)%images.length];
+      try{
+        const props=doc.getImageProperties(pi.dataUrl);
+        const w=Math.min(115,maxW), h=Math.min(105,w*props.height/props.width);
+        if(y+h+16>280){doc.addPage();y=20;}
+        doc.addImage(pi.dataUrl,marginL,y,w,h);y+=h+5;
+        doc.setFontSize(8);doc.setTextColor(95);
+        const caption=doc.splitTextToSize('Fonte visual para conferir: '+pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,maxW);
+        doc.text(caption,marginL,y);y+=caption.length*4+7;doc.setTextColor(0);
+      }catch(e){console.warn('Imagem da seção não incorporada',e);}
+    }
   }
 
   if(currentReport.pageImages && currentReport.pageImages.length>0){
@@ -2199,8 +2234,11 @@ function exportReportPPTX(){
     const slide = pptx.addSlide();
     slide.background = { color: '12171C' };
     slide.addText(sec.heading || '', { x:0.5, y:0.35, w:9, h:0.7, fontSize:22, bold:true, color:'4FA8E0' });
-    const bulletText = (sec.bullets||[]).map(b => ({ text:b, options:{ bullet:true, breakLine:true } }));
-    slide.addText(bulletText, { x:0.6, y:1.2, w:8.8, h:4, fontSize:16, color:'E4E7EA', valign:'top' });
+    const images=currentReport.pageImages||[];
+    const pi=images.length?images[(currentReport.parsed.secoes||[]).indexOf(sec)%images.length]:null;
+    const bulletText=(sec.bullets||[]).map(b=>({text:b.slice(0,340),options:{bullet:true,breakLine:true}}));
+    slide.addText(bulletText,{x:0.55,y:1.15,w:pi?5.4:8.9,h:4.05,fontSize:pi?11:13,color:'E4E7EA',valign:'top',breakLine:false});
+    if(pi){try{slide.addImage({data:pi.dataUrl,x:6.2,y:1.15,w:3.2,h:3.55,sizing:{type:'contain',w:3.2,h:3.55}});slide.addText(pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,{x:6.2,y:4.78,w:3.2,h:0.45,fontSize:8,color:'9FAEBA'});}catch(e){console.warn('Falha imagem PPTX',e);}}
   }
 
   if(currentReport.pageImages && currentReport.pageImages.length>0){

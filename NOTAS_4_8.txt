@@ -1,0 +1,8 @@
+RotorMind 4.8 Beta — mudanças reais
+- Pesquisa separada para P701 e RDR-7000, balanceamento de evidências por capítulo.
+- Resposta mais extensa por capítulo; sem fingir análise a partir de trechos de índice.
+- Bloqueia exportação de relatório incompleto quando algum capítulo falha.
+- Fontes visuais inseridas entre capítulos na prévia, PDF e PowerPoint; originais ainda não são recortados automaticamente.
+- Mantém os dados IndexedDB; não desinstale o app nem limpe Safari.
+- Validado: sintaxe JavaScript e integridade ZIP; NÃO validado em iPad real, Gemini ou com manuais completos.
+- Não enviar manuais confidenciais sem autorização.
