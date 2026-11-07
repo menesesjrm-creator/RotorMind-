@@ -1895,32 +1895,31 @@ Regras: ${sectionLimit}, bullets curtos e objetivos (uma frase cada), técnicos.
 TRECHOS DE MANUAL:
 ${contextBlock}`;
 
-  let data, lastErr;
-  for(const model of GEMINI_MODEL_CANDIDATES){
-    try{
-      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-        body: JSON.stringify({ contents:[{role:'user', parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:6000, responseMimeType:'application/json'} })
-      });
-      if(!resp.ok){ const errText = await resp.text(); const e=new Error('HTTP '+resp.status+': '+errText.slice(0,200)); e.status=resp.status; throw e; }
-      data = await resp.json(); lastErr=null; break;
-    }catch(e){ lastErr=e; if(e.status!==404 && e.status!==429) break; }
+  // Geração resiliente: tentar resposta estruturada curta antes de falhar.
+  let parsed=null, lastErr=null;
+  for(let attempt=0;attempt<3 && !parsed;attempt++){
+    const compact = attempt>0;
+    const attemptPrompt = compact ? prompt.replace(sectionLimit, '2 a 4 seções, 2 a 3 bullets curtos por seção') + '\nIMPORTANTE: resposta compacta, JSON completo, sem comentários.' : prompt;
+    for(const model of GEMINI_MODEL_CANDIDATES){
+      try{
+        const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+          method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+          body:JSON.stringify({contents:[{role:'user',parts:[{text:attemptPrompt}]}],generationConfig:{maxOutputTokens:compact?3500:6000,responseMimeType:'application/json'}})
+        });
+        if(!resp.ok){const e=new Error('HTTP '+resp.status+': '+(await resp.text()).slice(0,180));e.status=resp.status;throw e;}
+        const data=await resp.json();
+        const cand=(data.candidates||[])[0];
+        const raw=(cand?.content?.parts||[]).map(x=>x.text||'').join('').trim();
+        if(cand?.finishReason==='MAX_TOKENS') throw new Error('Limite de resposta atingido');
+        const start=raw.indexOf('{'),end=raw.lastIndexOf('}');
+        if(start<0||end<start)throw new Error('Resposta sem JSON completo');
+        const result=JSON.parse(raw.slice(start,end+1));
+        if(typeof result.titulo!=='string'||!Array.isArray(result.secoes)||!result.secoes.length||!result.secoes.every(x=>typeof x.heading==='string'&&Array.isArray(x.bullets)&&x.bullets.every(b=>typeof b==='string')))throw new Error('Estrutura de resumo inválida');
+        parsed=result;lastErr=null;break;
+      }catch(e){lastErr=e;console.warn('Tentativa de geração',attempt+1,model,e.message);if(e.status===401||e.status===403)throw e;}
+    }
   }
-  if(!data) throw lastErr;
-  if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-  const cand = (data.candidates||[])[0];
-  const raw = cand && cand.content && cand.content.parts ? cand.content.parts.map(p=>p.text||'').join('') : '';
-  if(cand && cand.finishReason === 'MAX_TOKENS'){
-    throw new Error('A resposta ficou grande demais e foi cortada no meio. Tente um pedido com tema mais específico (ex: "resumo do sistema hidráulico" em vez de um resumo geral de tudo).');
-  }
-  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
-  let parsed;
-  try{
-    if(start===-1 || end===-1) throw new Error('resposta vazia ou sem JSON');
-    parsed = JSON.parse(raw.slice(start, end+1));
-  }catch(parseErr){
-    throw new Error('A IA não retornou um resumo completo (resposta cortada ou malformada). Tente de novo, ou peça um tema mais específico.');
-  }
+  if(!parsed)throw new Error('Não foi possível concluir a geração após novas tentativas: '+(lastErr?.message||'resposta inválida'));
   let image = null;
   if(wantsImages){ image = await generateImageForReport(parsed.titulo, topic, aircraft); }
 
@@ -2112,7 +2111,7 @@ function exportReportPPTX(){
     titleSlide.addShape('rect', { x:0, y:0, w:10, h:5.63, fill:{color:'000000', transparency:45}, line:{type:'none'} });
   }
   titleSlide.addText(currentReport.parsed.titulo || 'Resumo', { x:0.5, y:2.0, w:9, h:1.3, fontSize:30, bold:true, color:'FFFFFF', align:'center' });
-  titleSlide.addText('RotorMind · FOR TRAINING AND STUDY PURPOSES ONLY', { x:0.5, y:3.3, w:9, h:0.5, fontSize:11, color:'8B95A1', align:'center' });
+  titleSlide.addText('RotorMind 4.1 · FOR TRAINING AND STUDY PURPOSES ONLY', { x:0.5, y:3.3, w:9, h:0.5, fontSize:11, color:'8B95A1', align:'center' });
 
   for(const sec of (currentReport.parsed.secoes||[])){
     const slide = pptx.addSlide();
@@ -2692,22 +2691,29 @@ document.getElementById('v21-preview').addEventListener('click', async ()=>{
   }catch(e){target.textContent='Erro na pesquisa local: '+(e.message||e);}
 });
 v2SetArea(v2Area);
-document.getElementById('v2-create').addEventListener('click',()=>{
-  const topic = document.getElementById('v2-topic').value.trim();
-  const fmt = document.getElementById('v2-format').value;
-  const withImages = document.getElementById('v2-images').value==='yes';
-  const status = document.getElementById('v2-studio-msg');
+document.getElementById('v2-create').addEventListener('click',async()=>{
+  const topic=document.getElementById('v2-topic').value.trim();
+  const fmt=document.getElementById('v2-format').value;
+  const withImages=document.getElementById('v2-images').value==='yes';
+  const status=document.getElementById('v2-studio-msg');
+  const button=document.getElementById('v2-create');
   if(!topic){status.textContent='Informe o assunto da aula ou apresentação.';return;}
-  const aircraft = ['AW139','S-92'].includes(v2Area)?v2Area:'';
-  const figures = [...rmSelectedFigures.values()];
-  const visualNotes = figures.length ? ' Páginas visuais selecionadas para conferência: '+figures.map(f=>f.title+' (rev. '+f.revision+', pág. '+f.page+')').join('; ')+'. Conferir as imagens diretamente nos PDFs; não afirmar que a IA recebeu as imagens.' : '';
-  const request = `Criar ${fmt==='pptx'?'apresentação PowerPoint':fmt==='pdf'?'resumo PDF':'aula estruturada'} sobre ${topic}${aircraft?' do '+aircraft:''}${withImages?' com imagens das páginas dos manuais':''}. Usar somente fontes indexadas, citar documento, revisão e página. Não inventar dados.${visualNotes}`;
-  const navBtn = document.querySelector('nav button[data-view="talk"]');
-  if(navBtn) navBtn.click();
-  const chat = document.getElementById('chat-input');
-  chat.value = request;
-  chat.focus();
-  status.textContent='Pedido preparado. As figuras selecionadas serão incluídas no PDF/PPTX quando você pedir geração com imagens; revise e toque em Enviar. O envio de trechos à IA exigirá consentimento.';
+  if(button.disabled)return;
+  const aircraft=['AW139','S-92'].includes(v2Area)?v2Area:'';
+  const request=`Criar ${fmt==='pptx'?'apresentação PowerPoint':fmt==='pdf'?'resumo PDF':'aula estruturada'} sobre ${topic}${aircraft?' do '+aircraft:''}${withImages?' com imagens das páginas dos manuais':''}. Usar somente fontes indexadas, citar documento, revisão e página. Não inventar dados.`;
+  button.disabled=true;button.textContent='Gerando material…';
+  status.textContent='Consultando fontes e gerando no Estúdio. Não feche esta página.';
+  try{
+    const report=await generateReportFromRequest(request);
+    currentReport=report;
+    await saveReportToHistory(report);
+    if(fmt==='pptx'){status.textContent='Apresentação gerada. Preparando download…';await exportReportPPTX();}
+    else if(fmt==='pdf'){status.textContent='PDF gerado. Preparando download…';await exportReportPDF();}
+    else {status.textContent='Aula gerada. Consulte o histórico de materiais.';}
+    if(withImages && !report.pageImages.length)status.textContent+=' Nenhuma figura original selecionada: use a pesquisa de figuras do Estúdio e selecione as páginas desejadas.';
+    await renderReportHistory();
+  }catch(e){console.error(e);status.textContent='Falha na geração: '+(e.message||e);}
+  finally{button.disabled=false;button.textContent='Gerar material';}
 });
 </script>
 
