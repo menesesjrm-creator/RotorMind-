@@ -1,0 +1,8 @@
+RotorMind 4.7 Beta — melhorias locais
+- Corrige falso erro de imagem: páginas originais já renderizadas não dependem da capa sintética opcional.
+- Ordenação de figuras prioriza diagramas, painéis e equipamentos, penalizando sumários e massa 7000 kg.
+- Diversifica candidatos por família de radar quando há evidência no texto.
+- Prévia não é perdida quando o histórico excede o armazenamento do Safari.
+- Mantém IndexedDB e dados existentes; não apague o aplicativo.
+- Testes: sintaxe JS e integridade do ZIP; iPad/Safari e qualidade da busca exigem validação real.
+- Não publicar manuais ou chaves no GitHub.

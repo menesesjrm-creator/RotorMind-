@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>RotorMind 3.0 — Aviation Intelligence</title>
+<title>RotorMind 4.7 — Aviation Intelligence</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" href="./icon-192.png">
@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V4.6 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V4.7 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1976,12 +1976,28 @@ async function generateReportFromRequest(rawRequest){
 
   if(wantsImages && pageImages.length===0){
     const seen=new Set();
-    const imageCandidates=[...hits].filter(h=>!/(table of contents|index \(cont|list of illustrations|indice|sumario)/i.test(String(h.chunk.text||'').slice(0,800))).sort((a,b)=>{
-      const quality=h=>/figure|figura|diagram|control panel|display|antenna|radome|weather radar|wx path|gmap|beacon|vertical buffer|art-7000/i.test(String(h.chunk.text||''))?1:0;
-      return quality(b)-quality(a);
-    });
-    for(const h of imageCandidates){
-      if(pageImages.length>=5) break;
+    // Pontuar páginas com figuras e diversidade entre os radares. Índices e páginas de rosto perdem prioridade.
+    const figureScore=h=>{
+      const t=String(h.chunk.text||'').slice(0,3500);
+      const title=String(h.doc.title||'');
+      let score=0;
+      if(/\b(fig(?:ure|ura)?[.\s-]*\d+|diagram|schematic|control panel|display example|radar display|antenna assembly|weather display)\b/i.test(t))score+=8;
+      if(/\b(ART[- ]?7000|RDR[- ]?7000|Primus[ -]?(?:701|P701)|P701|WR[- ]?701)\b/i.test(t+' '+title))score+=5;
+      if(/\b(WX PATH|WX ALL|GMAP|tilt|beacon|vertical buffer|maritime)\b/i.test(t))score+=3;
+      if(/\b(table of contents|list of effective pages|list of illustrations|index|contents|introduction|weight and balance)\b/i.test(t.slice(0,450)))score-=15;
+      if(/\b(weight extension|7000\s*kg|mass extension)\b/i.test(t+' '+title))score-=30;
+      return score;
+    };
+    const imageCandidates=[...hits].filter(h=>figureScore(h)>-8).sort((a,b)=>figureScore(b)-figureScore(a));
+    const radarGroup=h=>/\b(?:P701|Primus[ -]?701|WR[- ]?701)\b/i.test(h.doc.title+' '+h.chunk.text.slice(0,450))?'p701':/\b(?:RDR[- ]?7000|ART[- ]?7000)\b/i.test(h.doc.title+' '+h.chunk.text.slice(0,450))?'rdr7000':'other';
+    const groups={p701:[],rdr7000:[],other:[]};
+    for(const h of imageCandidates)groups[radarGroup(h)].push(h);
+    const balanced=[];
+    while(balanced.length<10 && Object.values(groups).some(a=>a.length)){
+      for(const group of ['p701','rdr7000','other'])if(groups[group].length && balanced.length<10)balanced.push(groups[group].shift());
+    }
+    for(const h of balanced){
+      if(pageImages.length>=6) break;
       const key=h.doc.id+':'+h.chunk.page;
       if(seen.has(key)) continue;
       seen.add(key);
@@ -2067,9 +2083,8 @@ function renderReport(){
         <button class="btn" id="report-back" style="flex-shrink:0;font-size:11px;padding:5px 9px;">← voltar</button>
       </div>
     </div>
-    ${image ? `<div class="card"><img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;"></div>` : (wantsImages ? `<div class="card" style="border-left:3px solid var(--red);background:#2A1416;">
-      <div style="font-size:12.5px;color:var(--red);">⚠️ Não consegui gerar a imagem dessa vez. Tente pedir de novo.</div>
-    </div>` : '')}
+    ${image ? `<div class="card"><h3>Ilustração gerada por IA (não é figura do manual)</h3><img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;"></div>` : ''}
+    ${wantsImages && pageImages && pageImages.length ? `<div style="font-size:12px;color:var(--green);margin:4px 0 10px;">✓ ${pageImages.length} página(s) original(is) dos manuais incorporada(s). A geração de capa por IA é opcional e independente.</div>` : ''}
     ${pageImages && pageImages.length>0 ? `<div class="card"><h3>Páginas originais dos manuais (confira as figuras)</h3><div style="display:flex;gap:8px;overflow-x:auto;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);cursor:pointer;" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div></div>` : ''}
     ${(parsed.secoes||[]).map(sec => `
       <div class="card">
@@ -2775,10 +2790,10 @@ document.getElementById('v2-create').addEventListener('click',async()=>{
     const request=`Criar ${fmt==='pptx'?'apresentação PowerPoint':fmt==='pdf'?'resumo PDF':'aula estruturada'} sobre ${topic}${aircraft?' do '+aircraft:''}${withImages?' com imagens das páginas dos manuais':''}. Usar somente fontes indexadas, citar documento, revisão e página. Não inventar dados.`;
     const report=await generateReportFromRequest(request);
     currentReport=report;
-    await saveReportToHistory(report);
     renderReport();
-    await renderReportHistory();
-    status.textContent='✓ Material preparado e salvo. Confira a prévia abaixo e escolha PDF ou PowerPoint quando estiver satisfeito.';
+    try{await saveReportToHistory(report);await renderReportHistory();}
+    catch(storageError){console.warn('Histórico indisponível:',storageError);status.textContent='Prévia pronta. O histórico não foi salvo (espaço local insuficiente); exporte o arquivo agora.';}
+    if(!status.textContent.includes('histórico não foi salvo')) status.textContent='✓ Material preparado. Confira a prévia e escolha PDF ou PowerPoint.';
     document.getElementById('report-result').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){console.error(e);status.textContent='Falha ao gerar: '+(e.message||e);}
   finally{btn.disabled=false;}
