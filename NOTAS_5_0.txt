@@ -1,0 +1,1 @@
+RotorMind 5.0 beta: correção do gerador comparativo. Modelo 2.5 Flash/Lite com thinkingBudget 0 para preservar tokens de resposta; saída 2048 tokens; diagnóstico de finishReason e consumo de tokens; fallback entre modelos; verificação de citações. Não foram realizados testes de rede/Gemini/iPad. Não apague dados do navegador.

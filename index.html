@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V4.9 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V5.0 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1930,34 +1930,41 @@ async function generateReportFromRequest(rawRequest){
     // Pedidos pequenos evitam respostas cortadas: a v4.8 enviava até 12.000
     // caracteres de fontes por capítulo e pedia JSON com 6 bullets extensos.
     const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,650)}`).join('\n\n');
-    const attempts=[
-      {bullets:3,limit:1100},
-      {bullets:2,limit:700},
-      {bullets:1,limit:400}
-    ];
+    // 5.0: não consumir o orçamento de saída com raciocínio interno do modelo.
+    // O fallback usa um esquema mínimo, uma seção por chamada, com diagnóstico real.
+    const attempts=[{bullets:3,limit:2048},{bullets:2,limit:2048},{bullets:1,limit:2048}];
     let last;
+    const models=['gemini-2.5-flash','gemini-2.5-flash-lite'];
     for(const attempt of attempts){
-      const prompt=`Capítulo: ${chapter.name}. Tema: ${topic}. Use APENAS fontes abaixo. Compare os dois equipamentos somente quando houver evidência; caso contrário, declare a lacuna. RDR-7000 é modelo de radar, NÃO peso. Diferencie modos e instalações. Cada afirmação técnica precisa de [F1], [F2] etc. Responda APENAS JSON válido: {"secoes":[{"heading":"${chapter.name}","bullets":["texto [F1]"]}]}. Escreva exatamente ${attempt.bullets} bullets, com até 55 palavras cada, sem introdução. Não use índices como prova. FONTES:\n${citations}`;
-      for(const model of GEMINI_MODEL_CANDIDATES){
+      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Produza ${attempt.bullets} observações técnicas concisas com referência [F1], [F2] etc em cada uma. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
+      for(const model of models){
         try{
+          const config={maxOutputTokens:attempt.limit,responseMimeType:'application/json',temperature:0.1,thinkingConfig:{thinkingBudget:0}};
           const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
             method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-            body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:attempt.limit,responseMimeType:'application/json',temperature:0.2}})
+            body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:config})
           });
-          if(!resp.ok){const e=new Error('HTTP '+resp.status);e.status=resp.status;throw e;}
-          const data=await resp.json(),candidate=(data.candidates||[])[0];
-          if(candidate?.finishReason==='MAX_TOKENS')throw new Error('Resposta truncada');
-          const raw=candidate?.content?.parts?.map(p=>p.text||'').join('')||'';
-          const a=raw.indexOf('{'),b=raw.lastIndexOf('}');if(a<0||b<a)throw new Error('JSON incompleto');
+          const data=await resp.json();
+          if(!resp.ok){const e=new Error(`Gemini ${model}: HTTP ${resp.status} — ${String(data?.error?.message||'').slice(0,180)}`);e.status=resp.status;throw e;}
+          const candidate=(data.candidates||[])[0];
+          const reason=candidate?.finishReason||'SEM_CANDIDATO';
+          const raw=(candidate?.content?.parts||[]).map(p=>p.text||'').join('');
+          if(reason==='MAX_TOKENS')throw new Error(`Gemini ${model}: MAX_TOKENS; saída ${raw.length} caracteres; tokens de saída ${data.usageMetadata?.candidatesTokenCount||'?'}; raciocínio ${data.usageMetadata?.thoughtsTokenCount||'?'}`);
+          if(reason!=='STOP')throw new Error(`Gemini ${model}: encerramento ${reason}; ${raw.length} caracteres`);
+          const a=raw.indexOf('{'),b=raw.lastIndexOf('}');
+          if(a<0||b<a)throw new Error(`Gemini ${model}: JSON incompleto (${raw.length} caracteres)`);
           const obj=JSON.parse(raw.slice(a,b+1));
-          if(!Array.isArray(obj.secoes)||!obj.secoes.length)throw new Error('Capítulo vazio');
-          const section=obj.secoes[0];
-          const bullets=(Array.isArray(section.bullets)?section.bullets:[]).map(t=>String(t).replace(/\[F(\d+)\]/g,(m,n)=>{
+          const section=obj.secoes?.[0];
+          if(!Array.isArray(section?.bullets)||!section.bullets.length)throw new Error('Capítulo sem observações');
+          const bullets=section.bullets.map(t=>String(t).replace(/\[F(\d+)\]/g,(m,n)=>{
             const h=evidence[Number(n)-1];return h?`[${h.doc.title}, Rev. ${h.doc.revision||'não informada'}, PDF pág. ${h.chunk.page}]`:'[referência não validada]';
           }));
-          if(!bullets.length)throw new Error('Capítulo sem fatos');
+          if(bullets.some(t=>t.includes('[referência não validada]')))throw new Error('Citação de fonte inexistente');
           return {heading:chapter.name,bullets};
-        }catch(e){last=e;if(e.status===404)continue;if(e.status===401||e.status===403||e.status===429)throw e;break;}
+        }catch(e){last=e;
+          if(e.status===401||e.status===403||e.status===429)throw e;
+          // Modelo ausente, incompatibilidade de API ou saída truncada: tentar próximo.
+        }
       }
     }
     throw last||new Error('IA indisponível');
