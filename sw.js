@@ -1,7 +1,7 @@
-/* RotorMind 2.8: application shell + explicit vendor cache; never store manuals or AI requests. */
-const CACHE='rotormind-shell-v3-0';
-const VENDOR='rotormind-vendor-v3-0';
-const SHELL=['./','./index.html','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
+/* RotorMind 3.0: application shell + explicit vendor cache; never store manuals or AI requests. */
+const CACHE='rotormind-shell-v3-0-1';
+const VENDOR='rotormind-vendor-v3-0-1';
+const SHELL=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 const VENDOR_URLS=[
 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
