@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V3.1</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V4.0 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1062,7 +1062,9 @@ document.getElementById('rm-home-send').addEventListener('click',()=>{
   const chat=document.getElementById('chat-input');
   chat.value=value;
   chat.dispatchEvent(new Event('input',{bubbles:true}));
-  chat.focus();
+  // Envia a pergunta automaticamente, sem exigir segundo clique no rodapé.
+  input.value='';
+  if(!window.__rmSending) sendMessage();
 });
 document.getElementById('rm-home-query').addEventListener('keydown',e=>{
   if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();document.getElementById('rm-home-send').click();}
@@ -2335,6 +2337,15 @@ async function addPdfAttachmentToLibrary(file, chunks){
 }
 
 async function sendMessage(){
+  if(window.__rmSending) return;
+  const text = chatInput.value.trim();
+  if(!text) return;
+  window.__rmSending=true;
+  chatSend.disabled=true;
+  try { return await rmSendMessageCore(); }
+  finally { window.__rmSending=false; chatSend.disabled=false; }
+}
+async function rmSendMessageCore(){
   const text = chatInput.value.trim();
   if(!text) return;
 
@@ -2452,7 +2463,21 @@ ${contextBlock}` + await englishCoachClause();
     if(err.code === 'NO_API_KEY'){
       addBubble('assistant', 'Nenhuma chave de API configurada. Vá em Settings → cole sua API key do Google Gemini (aistudio.google.com/apikey) e salve, ou troque o motor pra "Local".');
     }else{
-      addBubble('assistant', 'Erro ao consultar a IA: ' + (err.message || String(err)));
+      // Pesquisa privada continua disponível mesmo quando WebGPU ou o modelo falham.
+      const isLocal = window.__rmLocalMode;
+      const technicalError = String(err.message || err);
+      if(isLocal && hits.length){
+        const safeHits = hits.slice(0,6);
+        const citations = safeHits.map(h => `<span class="src-link" data-doc="${h.doc.id}" data-page="${h.chunk.page}">${escapeHtml(h.doc.title)} · ${escapeHtml(h.doc.revision)} · pág. ${h.chunk.page}</span>`).join('<br>');
+        const excerpts = safeHits.map((h,i)=>`**Fonte ${i+1} — ${String(h.doc.title).replace(/[<>]/g,'')}, pág. ${h.chunk.page}:**\n${String(h.chunk.text||'').slice(0,650)}`).join('\n\n');
+        const fallback = addBubble('assistant', '⚠️ O modelo local não conseguiu gerar uma explicação. Abaixo estão **trechos encontrados diretamente na biblioteca local**, sem interpretação da IA. Confira a página original antes de usar informações operacionais.\n\n'+excerpts, '<div class="src-title">📚 FONTES LOCAIS</div>'+citations);
+        wireSourceClicks(fallback);
+        appendPageImages(fallback, safeHits, false);
+      }else if(isLocal){
+        addBubble('assistant', 'A IA local não conseguiu executar e a busca não encontrou trechos suficientes. Confira a biblioteca ou tente uma pergunta mais específica. Nenhum trecho foi enviado à IA externa.');
+      }else{
+        addBubble('assistant', 'Erro ao consultar a IA online: ' + technicalError);
+      }
     }
   }
 }

@@ -1,0 +1,1 @@
+Publicar apenas arquivos da aplicação, nunca manuais, chaves ou backups. Substituir index.html, sw.js e demais arquivos de app no repositório GitHub Pages; aguardar deploy e atualizar PWA. Fazer backup da biblioteca ANTES. 4.0 BETA não é o produto final.

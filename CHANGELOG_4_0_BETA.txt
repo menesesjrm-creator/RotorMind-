@@ -1,0 +1,7 @@
+RotorMind 4.0 BETA (fundação técnica, NÃO versão final)
+- Pergunta inicial envia automaticamente para o assistente.
+- Bloqueio de consultas simultâneas e botão Enviar durante processamento.
+- Se a IA local falhar, apresenta trechos locais e referências em vez de erro isolado.
+- Mantidos biblioteca, exportação e configurações existentes.
+LIMITAÇÕES: sem embeddings semânticos, sem geração de imagens por IA, sem testes reais no Safari/iPad.
+SEGURANÇA: não subir PDFs internos, chaves ou backups ao GitHub público. Faça backup antes de atualizar.
