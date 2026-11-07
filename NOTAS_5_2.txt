@@ -1,0 +1,7 @@
+RotorMind 5.2 Beta — protótipo de melhorias editoriais
+- Solicita explicações técnicas desenvolvidas em parágrafos, com referências.
+- Recorte manual de figuras selecionadas: quatro controles de margem, prévia local, salvar recorte no material.
+- Remove associação arbitrária de páginas diferentes a capítulos e duplicação automática de páginas completas nas exportações.
+- As imagens selecionadas permanecem na galeria da prévia. A inclusão contextual automática no PDF/PPTX ainda depende de associação explícita figura-seção; não é apresentada como implementada.
+- Não testado em Safari/iPad nem com Gemini real; modelos e limitações de API podem impedir a geração.
+- Não apague os dados do Safari: manuais locais podem estar armazenados nele.

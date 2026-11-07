@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V5.1 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V5.2 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1950,11 +1950,11 @@ async function generateReportFromRequest(rawRequest){
     const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,650)}`).join('\n\n');
     // 5.0: não consumir o orçamento de saída com raciocínio interno do modelo.
     // O fallback usa um esquema mínimo, uma seção por chamada, com diagnóstico real.
-    const attempts=[{bullets:3,limit:2048},{bullets:2,limit:2048},{bullets:1,limit:2048}];
+    const attempts=[{bullets:3,limit:4096},{bullets:2,limit:4096}];
     let last;
     const models=(await rmAvailableGeminiModels(apiKey)).slice(0,5);
     for(const attempt of attempts){
-      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Produza ${attempt.bullets} observações técnicas concisas com referência [F1], [F2] etc em cada uma. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
+      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Produza ${attempt.bullets} parágrafos explicativos densos (70 a 110 palavras por parágrafo), em português claro para piloto de helicóptero. Cada parágrafo deve explicar COMO funciona, POR QUE importa e QUAL a diferença operacional entre os equipamentos, sem copiar frases inteiras das fontes. Explique controles, configuração e limitações apenas se as fontes sustentarem. Cite [F1], [F2] etc junto de cada afirmação técnica. Não invente números, funções ou configurações. Se só um equipamento estiver documentado, declare explicitamente a lacuna; não force simetria. Não repita o título do tema dentro das seções. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
       for(const model of models){
         try{
           const config={maxOutputTokens:attempt.limit,responseMimeType:'application/json',temperature:0.1,thinkingConfig:{thinkingBudget:0}};
@@ -2148,7 +2148,7 @@ function renderReport(){
         <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;">
           ${(sec.bullets||[]).map(b=>`<li>${escapeHtml(b)}</li>`).join('')}
         </ul>
-        ${pageImages&&pageImages.length?(()=>{const pi=pageImages[idx%pageImages.length];return `<div style="display:grid;grid-template-columns:minmax(130px,240px) 1fr;gap:14px;align-items:center;margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;"><img src="${pi.dataUrl}" alt="Figura da fonte" style="width:100%;max-height:240px;object-fit:contain;background:white;border-radius:5px;cursor:zoom-in" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-size:12px;line-height:1.6"><b>Fonte visual para conferir</b><div>${escapeHtml(pi.docTitle)} · Rev. ${escapeHtml(pi.revision)} · PDF pág. ${pi.page}</div><small>Imagem original; a relação com esta seção exige conferência. Toque para ampliar.</small></div></div>`;})():''}
+        
       </div>`).join('')}
     <div class="card">
       <h3>Fontes</h3>
@@ -2205,43 +2205,9 @@ function exportReportPDF(){
       }
     }
     y += 4;
-    const images=currentReport.pageImages||[];
-    if(images.length){
-      const pi=images[(currentReport.parsed.secoes||[]).indexOf(sec)%images.length];
-      try{
-        const props=doc.getImageProperties(pi.dataUrl);
-        const w=Math.min(115,maxW), h=Math.min(105,w*props.height/props.width);
-        if(y+h+16>280){doc.addPage();y=20;}
-        doc.addImage(pi.dataUrl,marginL,y,w,h);y+=h+5;
-        doc.setFontSize(8);doc.setTextColor(95);
-        const caption=doc.splitTextToSize('Fonte visual para conferir: '+pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,maxW);
-        doc.text(caption,marginL,y);y+=caption.length*4+7;doc.setTextColor(0);
-      }catch(e){console.warn('Imagem da seção não incorporada',e);}
-    }
+
   }
 
-  if(currentReport.pageImages && currentReport.pageImages.length>0){
-    for(const pi of currentReport.pageImages){
-      doc.addPage(); y=18;
-      doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text('Página original do manual (verifique a fonte)', marginL, y); y+=9;
-      try{
-        const props=doc.getImageProperties(pi.dataUrl);
-        const usableH=242;
-        const ratio=Math.min(maxW/props.width,usableH/props.height);
-        const imgW=props.width*ratio, imgH=props.height*ratio;
-        doc.addImage(pi.dataUrl, marginL+(maxW-imgW)/2, y, imgW, imgH);
-        y+=imgH+7;
-        doc.setFontSize(8.5); doc.setFont(undefined,'normal'); doc.setTextColor(90);
-        const caption=doc.splitTextToSize(`${pi.docTitle} · Rev. ${pi.revision||'não informada'} · PDF pág. ${pi.page}`,maxW);
-        doc.text(caption,marginL,y); y+=caption.length*5+5;
-        doc.setTextColor(0);
-      }catch(e){ console.error('Falha ao embutir página do manual no PDF:', e); }
-    }
-  }
-
-  if(y>255){ doc.addPage(); y=20; }
-  doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text('Fontes', marginL, y); y += 7;
-  doc.setFont(undefined,'normal'); doc.setFontSize(8.5);
   const srcSet = [...new Map(currentReport.hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
   for(const h of srcSet){
     if(y>288){ doc.addPage(); y=20; }
@@ -2269,20 +2235,9 @@ function exportReportPPTX(){
     const slide = pptx.addSlide();
     slide.background = { color: '12171C' };
     slide.addText(sec.heading || '', { x:0.5, y:0.35, w:9, h:0.7, fontSize:22, bold:true, color:'4FA8E0' });
-    const images=currentReport.pageImages||[];
-    const pi=images.length?images[(currentReport.parsed.secoes||[]).indexOf(sec)%images.length]:null;
-    const bulletText=(sec.bullets||[]).map(b=>({text:b.slice(0,340),options:{bullet:true,breakLine:true}}));
-    slide.addText(bulletText,{x:0.55,y:1.15,w:pi?5.4:8.9,h:4.05,fontSize:pi?11:13,color:'E4E7EA',valign:'top',breakLine:false});
-    if(pi){try{slide.addImage({data:pi.dataUrl,x:6.2,y:1.15,w:3.2,h:3.55,sizing:{type:'contain',w:3.2,h:3.55}});slide.addText(pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,{x:6.2,y:4.78,w:3.2,h:0.45,fontSize:8,color:'9FAEBA'});}catch(e){console.warn('Falha imagem PPTX',e);}}
-  }
+    const bulletText=(sec.bullets||[]).map(b=>({text:b,options:{bullet:true,breakLine:true}}));
+    slide.addText(bulletText,{x:0.55,y:1.15,w:8.9,h:4.05,fontSize:12,color:'E4E7EA',valign:'top',breakLine:false});
 
-  if(currentReport.pageImages && currentReport.pageImages.length>0){
-    for(const pi of currentReport.pageImages){
-      const slide = pptx.addSlide();
-      slide.background = { color: '0A0D10' };
-      slide.addImage({ data: pi.dataUrl, x:0.8, y:0.4, w:8.4, h:4.4, sizing:{type:'contain', w:8.4, h:4.4} });
-      slide.addText(`${pi.docTitle} · Rev. ${pi.revision||'não informada'} · PDF pág. ${pi.page}`, { x:0.5, y:5.0, w:9, h:0.4, fontSize:11, color:'8B95A1', align:'center' });
-    }
   }
 
   const srcSet = [...new Map(currentReport.hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
@@ -2885,6 +2840,36 @@ document.getElementById('v2-create').addEventListener('click',async()=>{
 </style>
 <script>
 const rmSelectedFigures=new Map();
+async function rmCropFigure(key,f){
+ const source=new Image();source.src=f.image;
+ await new Promise((resolve,reject)=>{if(source.complete&&source.naturalWidth)return resolve();source.onload=resolve;source.onerror=reject;});
+ const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:#060d16ef;overflow:auto;padding:18px;color:#fff';
+ const panel=document.createElement('div');panel.style.cssText='max-width:850px;margin:auto;background:#152536;border:1px solid #37506a;border-radius:14px;padding:18px';
+ const heading=document.createElement('h3');heading.textContent='Recortar figura do manual — '+f.title+' · pág. '+f.page;
+ const help=document.createElement('p');help.textContent='Ajuste as margens da página. O recorte é feito somente no iPad, sem enviar imagens à IA. Confira se legendas e números permanecem legíveis.';
+ const preview=document.createElement('canvas');preview.style.cssText='display:block;max-width:100%;max-height:52vh;margin:12px auto;background:white';
+ const sliders={};const controls=document.createElement('div');controls.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px';
+ for(const [name,start] of [['Esquerda',0],['Topo',0],['Direita',100],['Base',100]]){
+  const box=document.createElement('label');box.textContent=name+' ';
+  const range=document.createElement('input');range.type='range';range.min=0;range.max=100;range.value=start;range.style.width='100%';sliders[name]=range;box.appendChild(range);controls.appendChild(box);
+  range.oninput=draw;
+ }
+ function draw(){
+  const l=+sliders.Esquerda.value,t=+sliders.Topo.value,r=+sliders.Direita.value,b=+sliders.Base.value;
+  if(r<=l+3||b<=t+3)return;
+  const sx=Math.round(source.naturalWidth*l/100),sy=Math.round(source.naturalHeight*t/100);
+  const sw=Math.round(source.naturalWidth*(r-l)/100),sh=Math.round(source.naturalHeight*(b-t)/100);
+  preview.width=sw;preview.height=sh;preview.getContext('2d').drawImage(source,sx,sy,sw,sh,0,0,sw,sh);
+ }
+ const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-top:12px';
+ const save=document.createElement('button');save.className='btn';save.textContent='Usar este recorte';save.onclick=()=>{
+  const l=+sliders.Esquerda.value,t=+sliders.Topo.value,r=+sliders.Direita.value,b=+sliders.Base.value;
+  if(r<=l+3||b<=t+3){alert('Área de recorte inválida');return;}
+  f.image=preview.toDataURL('image/jpeg',0.88);f.cropped=true;overlay.remove();rmRenderSelectedFigures();
+ };
+ const cancel=document.createElement('button');cancel.className='btn';cancel.textContent='Cancelar';cancel.onclick=()=>overlay.remove();
+ actions.append(save,cancel);panel.append(heading,help,controls,preview,actions);overlay.append(panel);document.body.append(overlay);draw();
+}
 function rmRenderSelectedFigures(){
  const target=document.getElementById('rm-figure-list');if(!target)return;
  target.replaceChildren();
@@ -2893,8 +2878,10 @@ function rmRenderSelectedFigures(){
  for(const [key,f] of rmSelectedFigures){const c=document.createElement('div');c.className='rm-figure-card';const img=document.createElement('img');img.src=f.image;img.alt='Página '+f.page+' do documento '+f.title;
  const label=document.createElement('small');label.textContent=f.title+' · Rev. '+f.revision+' · p. '+f.page;
  const open=document.createElement('button');open.className='btn';open.textContent='Abrir PDF';open.onclick=()=>openPdfViewer(f.docId,f.page);
+ const crop=document.createElement('button');crop.className='btn';crop.textContent='Recortar figura';
+ crop.onclick=()=>rmCropFigure(key,f);
  const remove=document.createElement('button');remove.className='btn';remove.textContent='Remover';remove.onclick=()=>{rmSelectedFigures.delete(key);rmRenderSelectedFigures();};
- c.append(img,label,open,remove);grid.appendChild(c);}
+ c.append(img,label,open,crop,remove);grid.appendChild(c);}
  target.appendChild(grid);
 }
 document.getElementById('rm-clear-figures').addEventListener('click',()=>{rmSelectedFigures.clear();rmRenderSelectedFigures();});
