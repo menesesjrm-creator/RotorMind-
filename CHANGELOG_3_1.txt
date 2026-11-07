@@ -1,0 +1,7 @@
+RotorMind 3.1
+- Navegação simplificada: removidos atalhos duplicados na tela Início.
+- Motor local: trechos limitados, histórico compacto, orçamento de contexto e segunda tentativa automática.
+- Chave Gemini: status de salvamento persistente e explícito; continua no IndexedDB local e fora do backup.
+- Cache PWA atualizado para v3.1.
+- Não há envio automático de manuais ao Gemini.
+- Validação em Safari/iPad ainda necessária.
