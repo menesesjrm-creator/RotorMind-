@@ -1,0 +1,1 @@
+RotorMind 5.1 Beta: consulta GET /v1beta/models usando a chave cadastrada; filtra generateContent; prioriza modelos reais; fallback somente entre modelos retornados. Não envia manuais na descoberta. Não testado com chave real ou Safari.

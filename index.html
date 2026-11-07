@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V5.0 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V5.1 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1401,7 +1401,7 @@ ${batch.map(c=>`--- PÁGINA ${c.page} (status: ${c.status}) ---\nANTIGO:\n${(c.o
 
     try{
       let data, lastErr, lastErrBody='';
-      for(const model of ["gemini-3.6-flash","gemini-3-flash-preview","gemini-3.1-flash-lite","gemini-2.5-flash"]){
+      for(const model of (await rmAvailableGeminiModels(apiKey)).slice(0,5)){
         try{
           const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
             method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
@@ -1865,6 +1865,24 @@ function parseReportRequest(raw){
   return { format, aircraft, wantsImages, topic };
 }
 
+/* 5.1: descobrir modelos autorizados pela chave, sem adivinhar nomes.
+   O endpoint de listagem não recebe conteúdo dos manuais. */
+let rmGeminiModelsCache=null;
+async function rmAvailableGeminiModels(apiKey){
+  if(rmGeminiModelsCache) return rmGeminiModelsCache;
+  const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=100',{
+    method:'GET',headers:{'x-goog-api-key':apiKey}
+  });
+  const data=await resp.json().catch(()=>({}));
+  if(!resp.ok) throw new Error('Não foi possível consultar os modelos disponíveis para esta chave (HTTP '+resp.status+'): '+String(data?.error?.message||'').slice(0,160));
+  const models=(data.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>m.name.replace(/^models\//,''));
+  const preferred=['gemini-2.5-flash','gemini-2.0-flash','gemini-2.5-pro','gemini-3-flash-preview'];
+  const chosen=[...preferred.filter(n=>models.includes(n)),...models.filter(n=>/^gemini-/.test(n)&&!preferred.includes(n))];
+  if(!chosen.length)throw new Error('Sua chave não apresentou modelos compatíveis com generateContent. Verifique API, projeto e permissões.');
+  rmGeminiModelsCache=chosen;
+  return chosen;
+}
+
 /* ---------------- Resumos: geração (chamada pela aba Consulta) + histórico ---------------- */
 async function generateImageForReport(titulo, topic, aircraft){
   try{
@@ -1934,7 +1952,7 @@ async function generateReportFromRequest(rawRequest){
     // O fallback usa um esquema mínimo, uma seção por chamada, com diagnóstico real.
     const attempts=[{bullets:3,limit:2048},{bullets:2,limit:2048},{bullets:1,limit:2048}];
     let last;
-    const models=['gemini-2.5-flash','gemini-2.5-flash-lite'];
+    const models=(await rmAvailableGeminiModels(apiKey)).slice(0,5);
     for(const attempt of attempts){
       const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Produza ${attempt.bullets} observações técnicas concisas com referência [F1], [F2] etc em cada uma. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
       for(const model of models){
@@ -1963,6 +1981,7 @@ async function generateReportFromRequest(rawRequest){
           return {heading:chapter.name,bullets};
         }catch(e){last=e;
           if(e.status===401||e.status===403||e.status===429)throw e;
+          if(e.status===404){rmGeminiModelsCache=null;}
           // Modelo ausente, incompatibilidade de API ou saída truncada: tentar próximo.
         }
       }
@@ -2336,7 +2355,7 @@ function addThinking(){
 function removeThinking(){ const el = document.getElementById('thinking-indicator'); if(el) el.remove(); }
 
 /* ---------------- shared AI call (Talk + Simulator) ---------------- */
-const GEMINI_MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
+const GEMINI_MODEL_CANDIDATES = null; // 5.1: modelos obtidos da API
 
 async function callAI(systemPrompt, messagesForApi, options={}){
   const engine = await getEngine();
@@ -2390,7 +2409,7 @@ async function callAI(systemPrompt, messagesForApi, options={}){
   }
 
   let data, lastErr;
-  for(const model of GEMINI_MODEL_CANDIDATES){
+  for(const model of (await rmAvailableGeminiModels(apiKey)).slice(0,5)){
     try{ data = await callGemini(model); lastErr = null; break; }
     catch(e){ lastErr = e; if(e.status !== 404 && e.status !== 429) break; }
   }
