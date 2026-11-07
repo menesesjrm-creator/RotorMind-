@@ -1,0 +1,1 @@
+RotorMind 4.6 Beta: geração por capítulos com buscas locais direcionadas, até 5 capítulos na comparação de radares, referências de fonte por afirmação, tratamento de falhas por capítulo e seleção automática de páginas menos propensas a serem índices. Não há verificação operacional em Safari/iPad; a qualidade depende dos manuais indexados e da IA autorizada.

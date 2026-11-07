@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V4.5 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V4.6 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1898,54 +1898,67 @@ async function generateReportFromRequest(rawRequest){
   const approved = await showModal({title:'Autorização de envio de fontes', message:'Para gerar este material com Gemini, trechos dos manuais recuperados serão enviados ao Google. NÃO prossiga com documentos confidenciais ou sem autorização expressa. Deseja autorizar este envio específico?', confirmText:'Autorizo este envio', cancelText:'Cancelar'});
   if(!approved) throw new Error('Geração cancelada: os trechos dos manuais não foram enviados.');
 
-  // 4.5: geração resiliente. Reduz contexto/saída automaticamente em vez de exigir
-  // que o piloto refaça a pergunta. Não cria dados fora das fontes locais.
-  const buildPrompt = (subset, compact) => {
-    const contextBlock=subset.map((h,i)=>`[${i+1}] ${h.doc.title} (Rev. ${h.doc.revision}, pág. ${h.chunk.page}): """${String(h.chunk.text||'').slice(0,compact?360:600)}"""`).join('\n\n');
-    return `Você prepara material técnico de aviação. Tema EXATO: "${topic}". Use SOMENTE os trechos abaixo. Não invente procedimentos, números ou limitações. Radar RDR-7000 NÃO é massa de 7000 kg. Se comparar equipamentos, diferencie apenas fatos documentados. Cada bullet deve citar documento, revisão e página. Responda SOMENTE JSON válido: {"titulo":"...","secoes":[{"heading":"...","bullets":["..."]}]}. ${compact?'No máximo 2 seções, 2 bullets por seção, uma frase curta por bullet.':'No máximo 4 seções, 3 bullets curtos por seção.'} Se faltarem informações, informe lacunas sem inventar. FONTES:\n${contextBlock}`;
-  };
-  async function requestStructured(prompt, maxTokens){
-    let lastErr;
+  // 4.6: pesquisa comparativa em capítulos, com fontes locais específicas por tema.
+  // O processamento é sequencial para evitar respostas truncadas no iPad.
+  const isComparison=/\b(compar|diferen|versus|\bvs\b|\bx\b)\w*/i.test(stripAccents(topic));
+  const isRadarComparison=isComparison && /radar|rdr|primus|p701|701/i.test(topic);
+  const chapters=isRadarComparison?[
+    {name:'Arquitetura, componentes e instalação',query:'radar P701 RDR-7000 ART-7000 antenna receiver transmitter magnetron solid state components installation'},
+    {name:'Varredura, tilt e apresentação meteorológica',query:'P701 RDR-7000 radar tilt real beam vertical buffer WX PATH WX ALL automatic manual scanning'},
+    {name:'Modos operacionais, controles e interfaces',query:'P701 RDR-7000 radar control panel WX GMAP1 GMAP2 beacon maritime mode configuration'},
+    {name:'Aplicação offshore, detecção e limitações',query:'P701 RDR-7000 radar beacon target overlay maritime offshore turbulence limitations warnings'},
+    {name:'Configurações e integração no AW139',query:'AW139 RFM supplement 21 P701 RDR-7000 P660 clone vertical buffer maritime part number'}
+  ]:isComparison?[
+    {name:'Características e arquitetura',query:topic+' architecture components description'},
+    {name:'Funcionamento e diferenças',query:topic+' operation functions modes differences'},
+    {name:'Limitações e aplicação operacional',query:topic+' limitations warnings procedures'}
+  ]:[{name:'Conceitos e descrição',query:topic},{name:'Funcionamento e aplicações',query:topic+' operation functions'},{name:'Limitações e referências',query:topic+' limitations warnings'}];
+  const allEvidence=[];
+  const addEvidence=(h)=>{if(!allEvidence.some(x=>x.doc.id===h.doc.id&&x.chunk.page===h.chunk.page))allEvidence.push(h);};
+  hits.forEach(addEvidence);
+  async function requestChapter(chapter, evidence){
+    const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,1050)}`).join('\n\n');
+    const prompt=`Você é editor técnico aeronáutico. Crie SOMENTE o capítulo "${chapter.name}" de um material sobre "${topic}". Baseie-se EXCLUSIVAMENTE nas fontes numeradas. Explique diferenças operacionais concretas entre equipamentos, sempre que as fontes permitirem. Para cada fato técnico, cite [F1] etc., exatamente como aparece na lista. Não confunda RDR-7000 com peso 7000 kg. Diferencie modos e configurações; não atribua recursos de uma configuração a todas. Se uma informação não estiver nas fontes, diga explicitamente "não confirmado nos trechos consultados". Não invente especificações. Não cite um documento que não esteja abaixo. Responda APENAS JSON válido no formato {"titulo":"...","secoes":[{"heading":"...","bullets":["..."]}]}. Faça UMA seção com 3 a 5 bullets explicativos, preferencialmente com contraste A versus B. FONTES:\n${citations}`;
+    let last;
     for(const model of GEMINI_MODEL_CANDIDATES){
       try{
         const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
           method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:maxTokens,responseMimeType:'application/json'}})
+          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:2300,responseMimeType:'application/json'}})
         });
-        if(!resp.ok){const errText=await resp.text();const e=new Error('HTTP '+resp.status+': '+errText.slice(0,200));e.status=resp.status;throw e;}
-        const data=await resp.json();
-        const cand=(data.candidates||[])[0];
-        const raw=cand?.content?.parts?.map(p=>p.text||'').join('')||'';
-        if(cand?.finishReason==='MAX_TOKENS')throw new Error('RESPOSTA_TRUNCADA');
-        const start=raw.indexOf('{'),end=raw.lastIndexOf('}');
-        if(start<0||end<start)throw new Error('JSON_INCOMPLETO');
-        const obj=JSON.parse(raw.slice(start,end+1));
-        if(!Array.isArray(obj?.secoes)||!obj.secoes.length)throw new Error('SECOES_INVALIDAS');
-        return obj;
-      }catch(e){lastErr=e;if(e.status===404||e.status===429)continue;throw e;}
+        if(!resp.ok){const e=new Error('HTTP '+resp.status);e.status=resp.status;throw e;}
+        const data=await resp.json(),candidate=(data.candidates||[])[0];
+        if(candidate?.finishReason==='MAX_TOKENS')throw new Error('Resposta truncada');
+        const raw=candidate?.content?.parts?.map(p=>p.text||'').join('')||'';
+        const a=raw.indexOf('{'),b=raw.lastIndexOf('}');if(a<0||b<a)throw new Error('JSON incompleto');
+        const obj=JSON.parse(raw.slice(a,b+1));
+        if(!Array.isArray(obj.secoes)||!obj.secoes.length)throw new Error('Capítulo vazio');
+        const section=obj.secoes[0];
+        const bullets=(Array.isArray(section.bullets)?section.bullets:[]).map(t=>String(t).replace(/\[F(\d+)\]/g,(m,n)=>{
+          const h=evidence[Number(n)-1];return h?`[${h.doc.title}, Rev. ${h.doc.revision||'não informada'}, PDF pág. ${h.chunk.page}]`:'[referência não validada]';
+        }));
+        if(!bullets.length)throw new Error('Capítulo sem fatos');
+        return {heading:chapter.name,bullets};
+      }catch(e){last=e;if(e.status===404||e.status===429)continue;break;}
     }
-    throw lastErr||new Error('Nenhum modelo disponível');
+    throw last||new Error('IA indisponível');
   }
-  let parsed, lastGenerationError;
-  const plans=[{sources:hits.slice(0,8),compact:false,maxTokens:4500},{sources:hits.slice(0,5),compact:true,maxTokens:3500}];
-  for(let attempt=0;attempt<plans.length;attempt++){
-    const plan=plans[attempt];
-    try{parsed=await requestStructured(buildPrompt(plan.sources,plan.compact),plan.maxTokens);break;}
-    catch(e){lastGenerationError=e;
-      // Só reduzir automaticamente quando a resposta foi truncada/malformada.
-      if(!/RESPOSTA_TRUNCADA|JSON_INCOMPLETO|SECOES_INVALIDAS|SyntaxError|Unexpected/.test(String(e.message||e)))throw e;
+  const sections=[],chapterErrors=[];
+  for(const chapter of chapters){
+    const targeted=await reportRetrieve(chapter.query,aircraft,8);
+    const evidence=(targeted.length?targeted:hits).slice(0,6);
+    evidence.forEach(addEvidence);
+    try{sections.push(await requestChapter(chapter,evidence));}
+    catch(err){
+      chapterErrors.push(chapter.name+': '+String(err.message||err));
+      sections.push({heading:chapter.name+' — fontes para revisão',bullets:evidence.slice(0,3).map(h=>
+        'Extrato documental (não é conclusão da IA): '+String(h.chunk.text||'').replace(/\s+/g,' ').slice(0,240)+`… [${h.doc.title}, Rev. ${h.doc.revision||'não informada'}, PDF pág. ${h.chunk.page}]`)});
     }
   }
-  if(!parsed){
-    // Recuperação 100% baseada em fontes: não perder o trabalho quando a IA
-    // exceder o limite. Os excertos são marcados como extratos, não síntese IA.
-    const excerpts=hits.slice(0,5).map(h=>{
-      const cleaned=String(h.chunk.text||'').replace(/\s+/g,' ').trim().slice(0,280);
-      return `${cleaned}${cleaned.length===280?'…':''} [${h.doc.title}, Rev. ${h.doc.revision}, pág. ${h.chunk.page}]`;
-    }).filter(Boolean);
-    if(!excerpts.length)throw lastGenerationError||new Error('Não foi possível preparar o conteúdo');
-    parsed={titulo:'Extratos documentais — '+(topic||'consulta'),secoes:[{heading:'Trechos recuperados (sem síntese da IA)',bullets:excerpts},{heading:'Aviso de revisão',bullets:['A IA não concluiu a síntese. Confira os trechos diretamente nos manuais antes de utilizar este material.']}]};
-  }
+  const parsed={titulo:(isComparison?'Comparação técnica: ':'Estudo técnico: ')+topic,secoes:sections};
+  if(chapterErrors.length)parsed.secoes.push({heading:'Capítulos que exigem revisão',bullets:chapterErrors.map(x=>'Geração parcial: '+x)});
+  // Incluir na bibliografia todas as fontes realmente pesquisadas por capítulo.
+  hits.splice(0,hits.length,...allEvidence.slice(0,32));
   parsed.secoes = parsed.secoes.map(sec=>({heading:String(sec.heading||sec.titulo||'Seção'),bullets:(Array.isArray(sec.bullets)?sec.bullets:[]).map(x=>String(x)).slice(0,8)}));
   // Ilustração sintética opcional: nunca substituir a figura original sem identificá-la.
   let image = null;
@@ -1963,8 +1976,12 @@ async function generateReportFromRequest(rawRequest){
 
   if(wantsImages && pageImages.length===0){
     const seen=new Set();
-    for(const h of hits){
-      if(pageImages.length>=3) break;
+    const imageCandidates=[...hits].filter(h=>!/(table of contents|index \(cont|list of illustrations|indice|sumario)/i.test(String(h.chunk.text||'').slice(0,800))).sort((a,b)=>{
+      const quality=h=>/figure|figura|diagram|control panel|display|antenna|radome|weather radar|wx path|gmap|beacon|vertical buffer|art-7000/i.test(String(h.chunk.text||''))?1:0;
+      return quality(b)-quality(a);
+    });
+    for(const h of imageCandidates){
+      if(pageImages.length>=5) break;
       const key=h.doc.id+':'+h.chunk.page;
       if(seen.has(key)) continue;
       seen.add(key);
