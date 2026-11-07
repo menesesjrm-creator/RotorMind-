@@ -1,0 +1,1 @@
+RotorMind 4.9 BETA: reduz tamanho de cada pedido ao Gemini, limita fontes a 4 trechos curtos por capítulo e tenta respostas progressivamente menores se houver truncamento. Evita publicar relatórios incompletos. Não implementa recorte automático de figuras. Testar no iPad antes de uso operacional. Manuais locais não incluídos no ZIP.\n

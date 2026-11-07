@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V4.8 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V4.9 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1927,29 +1927,38 @@ async function generateReportFromRequest(rawRequest){
     sideHits.forEach(addEvidence);
   }
   async function requestChapter(chapter, evidence){
-    const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,1500)}`).join('\n\n');
-    const prompt=`Você é editor técnico aeronáutico. Crie SOMENTE o capítulo "${chapter.name}" de um material sobre "${topic}". Baseie-se EXCLUSIVAMENTE nas fontes numeradas. Explique diferenças operacionais concretas entre equipamentos, sempre que as fontes permitirem. Para cada fato técnico, cite [F1] etc., exatamente como aparece na lista. Não confunda RDR-7000 com peso 7000 kg. Diferencie modos e configurações; não atribua recursos de uma configuração a todas. Se uma informação não estiver nas fontes, diga explicitamente "não confirmado nos trechos consultados". Não invente especificações. Não cite um documento que não esteja abaixo. Responda APENAS JSON válido no formato {"titulo":"...","secoes":[{"heading":"...","bullets":["..."]}]}. Faça UMA seção com 4 a 6 bullets detalhados. Para cada aspecto: descreva P701, RDR-7000, diferença operacional e ressalva da configuração. Não use índice remissivo como prova técnica. Se faltar fonte de um lado, indique a lacuna sem inventar. FONTES:\n${citations}`;
+    // Pedidos pequenos evitam respostas cortadas: a v4.8 enviava até 12.000
+    // caracteres de fontes por capítulo e pedia JSON com 6 bullets extensos.
+    const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,650)}`).join('\n\n');
+    const attempts=[
+      {bullets:3,limit:1100},
+      {bullets:2,limit:700},
+      {bullets:1,limit:400}
+    ];
     let last;
-    for(const model of GEMINI_MODEL_CANDIDATES){
-      try{
-        const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
-          method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
-          body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:3800,responseMimeType:'application/json'}})
-        });
-        if(!resp.ok){const e=new Error('HTTP '+resp.status);e.status=resp.status;throw e;}
-        const data=await resp.json(),candidate=(data.candidates||[])[0];
-        if(candidate?.finishReason==='MAX_TOKENS')throw new Error('Resposta truncada');
-        const raw=candidate?.content?.parts?.map(p=>p.text||'').join('')||'';
-        const a=raw.indexOf('{'),b=raw.lastIndexOf('}');if(a<0||b<a)throw new Error('JSON incompleto');
-        const obj=JSON.parse(raw.slice(a,b+1));
-        if(!Array.isArray(obj.secoes)||!obj.secoes.length)throw new Error('Capítulo vazio');
-        const section=obj.secoes[0];
-        const bullets=(Array.isArray(section.bullets)?section.bullets:[]).map(t=>String(t).replace(/\[F(\d+)\]/g,(m,n)=>{
-          const h=evidence[Number(n)-1];return h?`[${h.doc.title}, Rev. ${h.doc.revision||'não informada'}, PDF pág. ${h.chunk.page}]`:'[referência não validada]';
-        }));
-        if(!bullets.length)throw new Error('Capítulo sem fatos');
-        return {heading:chapter.name,bullets};
-      }catch(e){last=e;if(e.status===404||e.status===429)continue;break;}
+    for(const attempt of attempts){
+      const prompt=`Capítulo: ${chapter.name}. Tema: ${topic}. Use APENAS fontes abaixo. Compare os dois equipamentos somente quando houver evidência; caso contrário, declare a lacuna. RDR-7000 é modelo de radar, NÃO peso. Diferencie modos e instalações. Cada afirmação técnica precisa de [F1], [F2] etc. Responda APENAS JSON válido: {"secoes":[{"heading":"${chapter.name}","bullets":["texto [F1]"]}]}. Escreva exatamente ${attempt.bullets} bullets, com até 55 palavras cada, sem introdução. Não use índices como prova. FONTES:\n${citations}`;
+      for(const model of GEMINI_MODEL_CANDIDATES){
+        try{
+          const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+            method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},
+            body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:attempt.limit,responseMimeType:'application/json',temperature:0.2}})
+          });
+          if(!resp.ok){const e=new Error('HTTP '+resp.status);e.status=resp.status;throw e;}
+          const data=await resp.json(),candidate=(data.candidates||[])[0];
+          if(candidate?.finishReason==='MAX_TOKENS')throw new Error('Resposta truncada');
+          const raw=candidate?.content?.parts?.map(p=>p.text||'').join('')||'';
+          const a=raw.indexOf('{'),b=raw.lastIndexOf('}');if(a<0||b<a)throw new Error('JSON incompleto');
+          const obj=JSON.parse(raw.slice(a,b+1));
+          if(!Array.isArray(obj.secoes)||!obj.secoes.length)throw new Error('Capítulo vazio');
+          const section=obj.secoes[0];
+          const bullets=(Array.isArray(section.bullets)?section.bullets:[]).map(t=>String(t).replace(/\[F(\d+)\]/g,(m,n)=>{
+            const h=evidence[Number(n)-1];return h?`[${h.doc.title}, Rev. ${h.doc.revision||'não informada'}, PDF pág. ${h.chunk.page}]`:'[referência não validada]';
+          }));
+          if(!bullets.length)throw new Error('Capítulo sem fatos');
+          return {heading:chapter.name,bullets};
+        }catch(e){last=e;if(e.status===404)continue;if(e.status===401||e.status===403||e.status===429)throw e;break;}
+      }
     }
     throw last||new Error('IA indisponível');
   }
@@ -1960,7 +1969,7 @@ async function generateReportFromRequest(rawRequest){
     const unique=[...new Map(pool.map(h=>[h.doc.id+':'+h.chunk.page,h])).values()];
     const p701=unique.filter(h=>/\b(?:P701|Primus[ -]?701|WR[- ]?701)\b/i.test(h.doc.title+' '+h.chunk.text));
     const rdr=unique.filter(h=>/\b(?:RDR[- ]?7000|ART[- ]?7000)\b/i.test(h.doc.title+' '+h.chunk.text));
-    const evidence=isRadarComparison?[...p701.slice(0,3),...rdr.filter(h=>!p701.includes(h)).slice(0,3),...unique.filter(h=>!p701.includes(h)&&!rdr.includes(h)).slice(0,2)].slice(0,8):unique.slice(0,8);
+    const evidence=isRadarComparison?[...p701.slice(0,2),...rdr.filter(h=>!p701.includes(h)).slice(0,2)].slice(0,4):unique.slice(0,4);
     evidence.forEach(addEvidence);
     try{sections.push(await requestChapter(chapter,evidence));}
     catch(err){
