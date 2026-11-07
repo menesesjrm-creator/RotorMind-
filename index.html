@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V4.3 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V4.4 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -354,18 +354,18 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
 <div class="field-row"><div class="field"><label>Formato</label><select id="v2-format"><option value="pdf">Resumo PDF</option><option value="pptx">Apresentação PowerPoint</option><option value="lesson">Aula estruturada</option></select></div><div class="field"><label>Imagens</label><select id="v2-images"><option value="yes">Páginas dos manuais</option><option value="no">Somente texto</option></select></div></div>
 <button class="btn" id="v21-preview" style="width:100%;margin-bottom:8px">🔎 Ver fontes antes de criar (100% local)</button>
 <button class="btn btn-primary" id="v2-create" style="width:100%">Preparar conteúdo</button>
-<div id="v21-sources" style="margin-top:10px"></div><div class="rm-figures"><h3>Imagens selecionadas</h3><p class="rm-muted">Depois de conferir as fontes, escolha páginas para usar como referência visual. As imagens não são enviadas automaticamente à IA.</p><div id="rm-figure-list"></div><button class="btn" id="rm-clear-figures" type="button">Limpar seleção</button></div>
+<div id="v21-sources" style="margin-top:10px"></div><div class="rm-figures"><h3>Páginas originais selecionadas</h3><p class="rm-muted">Depois de conferir as fontes, escolha páginas para usar como referência visual. As imagens não são enviadas automaticamente à IA.</p><div id="rm-figure-list"></div><button class="btn" id="rm-clear-figures" type="button">Limpar seleção</button></div>
 <div id="v2-studio-msg" style="font-size:11px;color:var(--dim);margin-top:8px"></div>
 </div>
         <div class="card">
           <h3>Resumos gerados</h3>
           <p style="font-size:12px;color:var(--dim);line-height:1.6;margin:0;">
-          Peça resumos, PDF ou PowerPoint direto na aba <b>Consulta</b> — ex: "gerar um powerpoint sobre motor do AW139". Tudo que for gerado aparece aqui, pra você abrir ou baixar de novo quando quiser.
+          Materiais preparados neste Estúdio e na Consulta. Toque em <b>ver</b> para abrir uma prévia aqui mesmo, sem mudar de aba.
           </p>
         </div>
         <div class="doc-list" id="report-history-list"><div class="empty">Nenhum resumo gerado ainda. Peça na aba Consulta.</div></div>
       </div>
-      <div class="manuals-wrap" id="report-result" style="display:none;"></div>
+      <div class="manuals-wrap" id="report-result" style="display:none;" aria-live="polite"></div>
     </div>
 
     <!-- SETTINGS -->
@@ -1998,6 +1998,7 @@ async function renderReportHistory(){
       const rec = log.find(x=>x.id===b.dataset.viewReport);
       currentReport = { parsed: rec.parsed, hits: rec.hits, wantsImages: rec.wantsImages, image: rec.image, pageImages: rec.pageImages||[] };
       renderReport();
+      document.getElementById('report-result').scrollIntoView({behavior:'smooth',block:'start'});
     });
   });
 }
@@ -2025,8 +2026,12 @@ function addReportBubble(report){
 
 function renderReport(){
   const { parsed, hits, wantsImages, image, pageImages } = currentReport;
-  document.getElementById('report-history-wrap').style.display = 'none';
+  // Mantenha o formulário e histórico visíveis; a prévia aparece no próprio Estúdio.
+  const historyWrap = document.getElementById('report-history-wrap');
+  historyWrap.style.display = '';
   const el = document.getElementById('report-result');
+  const studio = document.getElementById('v2-studio');
+  if(studio && el.previousElementSibling !== studio) studio.insertAdjacentElement('afterend', el);
   el.style.display = 'block';
 
   const srcSet = [...new Map(hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
@@ -2041,7 +2046,7 @@ function renderReport(){
     ${image ? `<div class="card"><img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;"></div>` : (wantsImages ? `<div class="card" style="border-left:3px solid var(--red);background:#2A1416;">
       <div style="font-size:12.5px;color:var(--red);">⚠️ Não consegui gerar a imagem dessa vez. Tente pedir de novo.</div>
     </div>` : '')}
-    ${pageImages && pageImages.length>0 ? `<div class="card"><h3>Imagens dos manuais</h3><div style="display:flex;gap:8px;overflow-x:auto;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);cursor:pointer;" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div></div>` : ''}
+    ${pageImages && pageImages.length>0 ? `<div class="card"><h3>Páginas originais dos manuais (confira as figuras)</h3><div style="display:flex;gap:8px;overflow-x:auto;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);cursor:pointer;" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div></div>` : ''}
     ${(parsed.secoes||[]).map(sec => `
       <div class="card">
         <h3>${escapeHtml(sec.heading||'')}</h3>
@@ -2056,17 +2061,18 @@ function renderReport(){
       </div>
     </div>
     <div class="card">
+      <p style="font-size:12px;color:var(--dim);margin:0 0 10px">Prévia pronta. A exportação só acontece quando você tocar no formato desejado.</p>
       <button class="btn btn-primary" id="report-export-pdf" style="width:100%;margin-bottom:8px;">📄 Baixar como PDF</button>
       <button class="btn btn-primary" id="report-export-pptx" style="width:100%;">📊 Baixar como PowerPoint</button>
     </div>
   `;
   document.getElementById('report-back').addEventListener('click', async ()=>{
-    document.getElementById('report-history-wrap').style.display = 'flex';
     el.style.display = 'none';
     await renderReportHistory();
   });
   document.getElementById('report-export-pdf').addEventListener('click', exportReportPDF);
   document.getElementById('report-export-pptx').addEventListener('click', exportReportPPTX);
+  // Prévia integrada: não navegar para a Consulta nem ocultar o formulário.
 }
 
 function exportReportPDF(){
@@ -2698,7 +2704,7 @@ document.querySelectorAll('.v2-air').forEach(btn=>btn.addEventListener('click',(
 // Prévia documental: consulta exclusivamente o índice local, sem chamar Gemini nem WebLLM.
 document.getElementById('v21-preview').addEventListener('click', async ()=>{
   const target=document.getElementById('v21-sources');
-  rmSelectedFigures.clear(); rmRenderSelectedFigures();
+  // Preserve escolhas já feitas; o usuário pode atualizar as fontes sem perder figuras.
   const topic=document.getElementById('v2-topic').value.trim();
   if(!topic){target.textContent='Informe primeiro o tema.';return;}
   target.textContent='Pesquisando fontes locais...';
@@ -2740,16 +2746,16 @@ document.getElementById('v2-create').addEventListener('click',async()=>{
   if(!topic){status.textContent='Informe o assunto da aula ou apresentação.';return;}
   const aircraft=['AW139','S-92'].includes(v2Area)?v2Area:'';
   const btn=document.getElementById('v2-create');btn.disabled=true;
-  status.textContent='Preparando material no Estúdio. Não feche esta página...';
+  status.textContent='Pesquisando fontes e preparando o conteúdo. A prévia será exibida aqui, sem mudar de aba...';
   try{
     const request=`Criar ${fmt==='pptx'?'apresentação PowerPoint':fmt==='pdf'?'resumo PDF':'aula estruturada'} sobre ${topic}${aircraft?' do '+aircraft:''}${withImages?' com imagens das páginas dos manuais':''}. Usar somente fontes indexadas, citar documento, revisão e página. Não inventar dados.`;
     const report=await generateReportFromRequest(request);
     currentReport=report;
     await saveReportToHistory(report);
     renderReport();
-    status.textContent='Material criado no Estúdio. Revise o conteúdo e use os botões de exportação abaixo.';
-    if(fmt==='pdf') exportReportPDF();
-    if(fmt==='pptx') await exportReportPPTX();
+    await renderReportHistory();
+    status.textContent='✓ Material preparado e salvo. Confira a prévia abaixo e escolha PDF ou PowerPoint quando estiver satisfeito.';
+    document.getElementById('report-result').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){console.error(e);status.textContent='Falha ao gerar: '+(e.message||e);}
   finally{btn.disabled=false;}
 });

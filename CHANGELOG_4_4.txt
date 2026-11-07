@@ -1,0 +1,8 @@
+RotorMind 4.4 Beta — Estúdio integrado
+- Prévia do material na mesma tela, abaixo do formulário.
+- Histórico atualizado imediatamente após salvar.
+- Exportação somente por ação explícita do usuário após revisar.
+- Preserva seleção de páginas ao repetir busca.
+- Esclarece que imagens são páginas originais, não figuras isoladas.
+- Atualiza cache do Service Worker.
+Limitações: não testado em Safari/iPad; imagens dependem dos PDFs locais e da seleção/recuperação.
