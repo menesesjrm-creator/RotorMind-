@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V5.3 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V5.4 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1669,6 +1669,10 @@ const AVIATION_SYNONYMS = {
   'weight': ['peso'],
 };
 
+AVIATION_SYNONYMS['hidraulico']=['hydraulic','hydraulics','hyd system','hyd pump','hyd pressure'];
+AVIATION_SYNONYMS['hidraulica']=['hydraulic','hydraulics','hyd system','hyd pump','hyd pressure'];
+AVIATION_SYNONYMS['hydraulic']=['hidraulico','hidraulica','hydraulics','hyd system'];
+AVIATION_SYNONYMS['hidraulicos']=['hydraulic','hydraulics','hyd system'];
 function expandQueryTokens(query){
   const qSet = new Set(tokenize(query));
   const normQuery = stripAccents(query.toLowerCase());
@@ -1798,6 +1802,33 @@ chatPreview.addEventListener('click', previewRetrieval);
 /* ---------------- Resumos cruzando manuais + exportação (PDF/PPTX) ---------------- */
 let currentReport = null;
 
+/* 5.4: bloqueio temático local. Evita PDFs longos com fontes administrativas
+   quando a pergunta é sobre um sistema técnico. Não substitui validação humana. */
+function rmTopicGate(query){
+ const q=stripAccents(String(query||'').toLowerCase());
+ const groups=[
+  {id:'hydraulic',query:/\b(hidraulic\w*|hydraulic\w*|hydraulics|hyd system|hyd1|hyd2|servoactuator\w*|servoatuador\w*)\b/, evidence:/\b(hydraulic\w*|hidraulic\w*|hydraulics|hyd1|hyd2|hyd system|servoactuator\w*|servoatuador\w*|hyd pump|hyd reservoir|hyd pressure)\b/},
+  {id:'radar',query:/\b(radar\w*|rdr[ -]?7000|primus|weather radar)\b/, evidence:/\b(radar\w*|rdr[ -]?7000|primus|weather radar|wx path|wx all|antenna receiver transmitter)\b/},
+  {id:'fuel',query:/\b(combustivel|fuel system|fuel pump|fuel heater)\b/, evidence:/\b(fuel|combustivel|fuel pump|fuel heater|fuel tank)\b/},
+  {id:'electrical',query:/\b(eletric\w*|electrical\w*|generator|gerador\w*|ac bus|dc bus)\b/, evidence:/\b(electrical\w*|eletric\w*|generator|gerador\w*|ac bus|dc bus|alternator)\b/}
+ ];
+ return groups.filter(g=>g.query.test(q));
+}
+function rmEvidenceRelevant(query,hit){
+ const groups=rmTopicGate(query); if(!groups.length)return true;
+ const text=stripAccents(String(hit?.chunk?.text||'').toLowerCase());
+ const title=stripAccents(String(hit?.doc?.title||'').toLowerCase());
+ // O assunto deve estar no texto da página; título de documento isolado não basta.
+ return groups.every(g=>g.evidence.test(text)) && !(
+   groups.some(g=>g.id==='hydraulic') &&
+   /\b(revision|revisao|revisoes|efb|document control|manual distribution)\b/.test(text) &&
+   (text.match(/\b(hydraulic\w*|hidraulic\w*|hyd1|hyd2)\b/g)||[]).length<2
+ );
+}
+function rmEvidenceCoverage(query,hits){
+ const eligible=(hits||[]).filter(h=>rmEvidenceRelevant(query,h));
+ return {eligible,rejected:(hits||[]).length-eligible.length, topic:rmTopicGate(query).map(g=>g.id).join(',')};
+}
 // Pesquisa do Estúdio: relevância por termos específicos, não por números isolados.
 // Mantém a seleção estritamente local até o consentimento explícito do usuário.
 function rmQueryProfile(query){
@@ -2810,11 +2841,11 @@ function v2DocInArea(doc){
   return aircraft.includes(v2Area.replace(/\s/g,'')) || aircraft === 'GERAL' || aircraft === 'OPERAÇÕESGERAIS';
 }
 // Filtramos resultados de consulta sem alterar o índice persistido ou os documentos.
-retrieve = async function(query, topK=8){ return (await v2BaseRetrieve(query, Math.max(topK*6, 48))).filter(h=>v2DocInArea(h.doc)).slice(0,topK); };
+retrieve = async function(query, topK=8){ return rmEvidenceCoverage(query,(await v2BaseRetrieve(query, Math.max(topK*10, 100))).filter(h=>v2DocInArea(h.doc))).eligible.slice(0,topK); };
 reportRetrieve = async function(topic, aircraft, topK){
   // Estúdio usa o equipamento indicado no tema; filtro de navegação não deve ocultar fontes.
   const queryAircraft = aircraft || (/\b(?:AW[ -]?139|A139)\b/i.test(topic)?'AW139':/\bS[ -]?92\b/i.test(topic)?'S-92':'');
-  return (await v2BaseReportRetrieve(topic, queryAircraft, Math.max((topK||24)*4, 60))).slice(0,topK||24);
+  return rmEvidenceCoverage(topic,await v2BaseReportRetrieve(topic, queryAircraft, Math.max((topK||24)*6, 100))).eligible.slice(0,topK||24);
 };
 function v2SetArea(area){
   v2Area = area;

@@ -1,3 +1,5 @@
-RotorMind 2.8 — PWA com preparação opcional de dependências offline.
+RotorMind 5.4 — Filtro de relevância temática
 
-Publique todos os arquivos da pasta no mesmo endereço HTTPS. Em Ajustes, clique Preparar bibliotecas offline com internet. O Safari/iPadOS pode remover caches e IndexedDB; faça backup regular. IA Gemini e WebLLM não são garantidos offline. PDFs importados não são incluídos no ZIP e permanecem no IndexedDB local. Esta versão não implementa embeddings nem foi testada no iPad.
+Partindo da 5.3, preserva dados e interface.
+Novo: consultas sobre hidráulico, radar, combustível e elétrico exigem evidência temática no TEXTO da página, não apenas no nome do manual. Sinônimos PT/EN de hidráulico adicionados. A filtragem ocorre localmente antes de enviar trechos ao gerador.
+Limitação: busca lexical, não semântica; pode excluir páginas relevantes que não mencionem literalmente o sistema. Não testado no Safari/iPad. Nenhum manual incluído.
