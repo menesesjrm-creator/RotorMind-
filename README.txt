@@ -1,5 +1,4 @@
-RotorMind 5.4 — Filtro de relevância temática
-
-Partindo da 5.3, preserva dados e interface.
-Novo: consultas sobre hidráulico, radar, combustível e elétrico exigem evidência temática no TEXTO da página, não apenas no nome do manual. Sinônimos PT/EN de hidráulico adicionados. A filtragem ocorre localmente antes de enviar trechos ao gerador.
-Limitação: busca lexical, não semântica; pode excluir páginas relevantes que não mencionem literalmente o sistema. Não testado no Safari/iPad. Nenhum manual incluído.
+RotorMind 5.5 Beta
+Correções: título sem repetição; figuras associadas ao assunto da seção; remoção de anexos de páginas completas duplicadas no PDF e PPTX.
+Limites: não há recorte automático validado de figuras nem testes no Safari do iPad.
+Para atualizar GitHub Pages, substitua index.html e mantenha seus arquivos PWA existentes. Faça backup da biblioteca local antes de alterações de armazenamento.
