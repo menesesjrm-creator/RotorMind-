@@ -1,6 +1,9 @@
-RotorMind 6.0 Beta — recorte local de figuras selecionadas no iPad.
+RotorMind 6.0 Beta — correção de identificação e cache
 
-Esta é uma evolução incremental sobre o código 5.8, NÃO a migração completa para React.
-Na Consulta, selecione uma página visual e use Recortar figura; arraste o retângulo e aplique. Gere o relatório após selecionar o recorte.
-Antes de atualizar o site, exporte o backup na Biblioteca/Configurações e preserve a origem do site para manter o IndexedDB.
-Não foram realizados testes reais em Safari iPad ou Gemini.
+Atualizações: título e cabeçalho exibem 6.0; Service Worker usa cache v6-0. Mantido o recurso de recorte manual do pacote anterior.
+
+Envie os SEIS arquivos para a raiz do mesmo repositório e branch usados pelo GitHub Pages. Não envie o ZIP sem descompactar.
+
+No iPad, abra o endereço publicado pelo Safari e recarregue. Não apague dados do site: os manuais e históricos podem estar no IndexedDB.
+
+Validação realizada: sintaxe JavaScript e integridade do ZIP. Não testado em Safari ou GitHub Pages.
