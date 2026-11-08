@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V6.2 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V6.3 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -244,11 +244,11 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
           <div class="dropzone" id="dropzone">Toque para selecionar um PDF, ou arraste aqui<br><span style="font-size:11px;">extração de texto + indexação por página</span></div>
           <input type="file" id="file-input" accept="application/pdf" style="display:none">
           <div class="card" style="margin-top:14px;padding:14px;border-color:var(--accent-border)">
-            <h3 style="margin:0 0 8px">Biblioteca incremental · Google Drive</h3>
-            <p style="font-size:12px;line-height:1.6;color:var(--dim)">Selecione vários PDFs baixados do Google Drive ou use o seletor de pasta quando disponível. Os arquivos serão processados localmente, um de cada vez. Esta versão <b>não acessa sua conta Google automaticamente</b>.</p>
+            <h3 style="margin:0 0 8px">Biblioteca incremental · PDFs do Drive / Arquivos</h3>
+            <p style="font-size:12px;line-height:1.6;color:var(--dim)">Importe PDFs usando Arquivos do iPad. Se o Google Drive aparecer em Explorar > Localizações, você pode selecioná-los por lá. A importação ocorre localmente, um arquivo por vez. <b>Não há sincronização automática com o Drive.</b> Se um arquivo falhar, os demais continuarão. Não feche o aplicativo durante a importação.</p>
             <div style="display:flex;flex-wrap:wrap;gap:8px">
               <button class="btn btn-primary" id="rm62-batch-select" type="button">Adicionar vários PDFs</button>
-              <button class="btn" id="rm62-folder-select" type="button">Selecionar pasta</button>
+              <button class="btn" id="rm62-folder-select" type="button">Selecionar pasta (desktop)</button>
             </div>
             <input id="rm62-batch-input" type="file" accept=".pdf,application/pdf" multiple hidden>
             <input id="rm62-folder-input" type="file" accept=".pdf,application/pdf" multiple webkitdirectory directory hidden>
@@ -1166,8 +1166,8 @@ function detectMetadata(chunks){
   return { revision, revisionDate };
 }
 
-async function handleFile(file){
-  if(file.type !== 'application/pdf'){ await showAlert('Envie um arquivo PDF.'); return; }
+async function handleFile(file, propagateErrors=false){
+  if(file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)){ await showAlert('Envie um arquivo PDF.'); return; }
   const title = document.getElementById('f-title').value.trim() || file.name.replace(/\.pdf$/i,'');
   const typedRevision = document.getElementById('f-revision').value.trim();
   const typedDate = document.getElementById('f-date').value;
@@ -1215,6 +1215,7 @@ async function handleFile(file){
     console.error(err);
     failed = true;
     dropzone.innerHTML = `<span style="color:var(--red);">Falha ao processar: ${escapeHtml(err.message||String(err))}<br><span style="font-size:11px;color:var(--dim2);">toque para tentar de novo</span></span>`;
+    if(propagateErrors) throw err;
   }finally{
     dropzone.classList.remove('busy');
     fileInput.value = '';
@@ -1224,50 +1225,71 @@ async function handleFile(file){
   }
 }
 
-// RotorMind 6.2: importação incremental de PDFs selecionados pelo usuário.
-// Não acessa Drive nem NotebookLM automaticamente e não transmite PDFs para serviços externos.
-async function rm62ImportBatch(files){
+// RotorMind 6.3: importação resiliente, sem conexão automática com Google Drive.
+let rm63ImportBusy=false;
+async function rm63ImportBatch(files){
   const statusEl=document.getElementById('rm62-batch-status');
   const all=Array.from(files||[]).filter(f=>/\.pdf$/i.test(f.name));
-  if(!all.length){statusEl.textContent='Nenhum PDF selecionado.';return;}
+  if(rm63ImportBusy){statusEl.textContent='Já existe uma importação em andamento. Aguarde a conclusão.';return;}
+  if(!all.length){statusEl.textContent='Nenhum PDF selecionado. No iPad, use Explorar > Localizações > Google Drive (se disponível) ou Arquivos.';return;}
+  rm63ImportBusy=true;
   const btns=['rm62-batch-select','rm62-folder-select'].map(id=>document.getElementById(id));
   btns.forEach(b=>b.disabled=true);
+  const saved={};
+  for(const id of ['f-title','f-revision','f-company','f-date','f-aircraft','f-category'])saved[id]=document.getElementById(id).value;
+  saved.keepPdf=document.getElementById('f-keep-pdf').checked;
   let imported=0,skipped=0,failed=0;
-  const originalTitle=document.getElementById('f-title').value;
-  const originalRevision=document.getElementById('f-revision').value;
-  const originalCompany=document.getElementById('f-company').value;
-  const originalDate=document.getElementById('f-date').value;
+  const failures=[];
   try{
     for(let i=0;i<all.length;i++){
       const file=all[i];
-      statusEl.textContent=`${i+1}/${all.length}: ${file.name} · importados ${imported}, ignorados ${skipped}, falhas ${failed}`;
-      const index=await getIndex();
-      const title=file.name.replace(/\.pdf$/i,'');
-      if(index.some(d=>d.title.toLowerCase()===title.toLowerCase() && d.fileSize===file.size)){skipped++;continue;}
-      document.getElementById('f-title').value=title;
-      document.getElementById('f-revision').value='';
-      document.getElementById('f-company').value=originalCompany;
-      document.getElementById('f-date').value='';
-      const before=index.length;
-      await handleFile(file);
-      if((await getIndex()).length>before)imported++;else failed++;
+      statusEl.textContent=`Processando ${i+1}/${all.length}: ${file.name} · ${imported} importados, ${skipped} duplicados, ${failed} falhas. Não feche o app.`;
+      try{
+        const index=await getIndex();
+        const title=file.name.replace(/\.pdf$/i,'');
+        if(index.some(d=>(d.title||'').toLowerCase()===title.toLowerCase()&&d.fileSize===file.size)){skipped++;continue;}
+        document.getElementById('f-title').value=title;
+        document.getElementById('f-revision').value='';
+        document.getElementById('f-date').value='';
+        document.getElementById('f-keep-pdf').checked=saved.keepPdf;
+        // handleFile now propagates failures for reliable batch accounting.
+        await handleFile(file, true);
+        const after=await getIndex();
+        if(after.some(d=>d.title===title&&d.fileSize===file.size)){imported++;}
+        else throw new Error('Arquivo processado, mas não localizado no índice');
+      }catch(err){
+        failed++;
+        failures.push(`${file.name}: ${err?.message||String(err)}`);
+        console.warn('Falha individual na importação',file.name,err);
+      }
+      // Yield to Safari between large PDFs to keep the interface responsive.
+      await new Promise(resolve=>setTimeout(resolve,0));
     }
-    statusEl.textContent=`Concluído: ${imported} PDF(s) importado(s), ${skipped} duplicado(s) ignorado(s), ${failed} falha(s). Confira os metadados e revisões antes de usar na pesquisa.`;
-  }catch(e){statusEl.textContent='Importação interrompida: '+(e.message||e);}
+    statusEl.textContent=`Concluído: ${imported} importado(s), ${skipped} duplicado(s), ${failed} falha(s).`+(failures.length?'\nFalhas:\n'+failures.join('\n'):'')+'\nOs PDFs não são sincronizados automaticamente com o Google Drive.';
+    statusEl.style.whiteSpace='pre-wrap';
+  }catch(err){statusEl.textContent='Erro geral de importação: '+(err?.message||String(err));}
   finally{
-    document.getElementById('f-title').value=originalTitle;
-    document.getElementById('f-revision').value=originalRevision;
-    document.getElementById('f-company').value=originalCompany;
-    document.getElementById('f-date').value=originalDate;
+    for(const [id,val] of Object.entries(saved))if(id!=='keepPdf')document.getElementById(id).value=val;
+    document.getElementById('f-keep-pdf').checked=saved.keepPdf;
     btns.forEach(b=>b.disabled=false);
-    document.getElementById('rm62-batch-input').value='';
-    document.getElementById('rm62-folder-input').value='';
+    for(const id of ['rm62-batch-input','rm62-folder-input'])document.getElementById(id).value='';
+    rm63ImportBusy=false;
+    try{await renderDocs();}catch(e){console.warn('Falha ao atualizar biblioteca',e);}
   }
 }
-document.getElementById('rm62-batch-select').addEventListener('click',()=>document.getElementById('rm62-batch-input').click());
-document.getElementById('rm62-folder-select').addEventListener('click',()=>document.getElementById('rm62-folder-input').click());
-document.getElementById('rm62-batch-input').addEventListener('change',e=>rm62ImportBatch(e.target.files));
-document.getElementById('rm62-folder-input').addEventListener('change',e=>rm62ImportBatch(e.target.files));
+for(const [buttonId,inputId] of [['rm62-batch-select','rm62-batch-input'],['rm62-folder-select','rm62-folder-input']]){
+  document.getElementById(buttonId).addEventListener('click',()=>{
+    if(rm63ImportBusy)return;
+    const input=document.getElementById(inputId);
+    input.value=''; // Allows selecting the same PDF again after cancellation or failure.
+    input.click();
+  });
+  document.getElementById(inputId).addEventListener('change',e=>{
+    const selected=Array.from(e.target.files||[]);
+    e.target.value='';
+    rm63ImportBatch(selected);
+  });
+}
 
 async function renderDocs(){
   const idx = await getIndex();
