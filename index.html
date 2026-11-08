@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>RotorMind 5.7 — Aviation Intelligence</title>
+<title>RotorMind 5.8 — Aviation Intelligence</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" href="./icon-192.png">
@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V5.7 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V5.8 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -2113,6 +2113,8 @@ async function generateReportFromRequest(rawRequest){
   if(wantsImages && pageImages.length===0){
     throw new Error('O conteúdo foi preparado, mas nenhuma página original pôde ser renderizada. Para evitar exportação sem imagens, verifique se os PDFs completos estão salvos localmente e selecione páginas em Ver fontes antes de criar.');
   }
+  const technicalIssues=rm58ReportIssues({parsed,topic});
+  if(technicalIssues.length)throw new Error('Validação técnica impediu o relatório: '+technicalIssues.join(' | '));
   return { parsed, hits, format, aircraft, topic, wantsImages, image, pageImages };
 }
 
@@ -2187,7 +2189,7 @@ function renderReport(){
       </div>
     </div>
     ${image ? `<div class="card"><h3>Ilustração gerada por IA (não é figura do manual)</h3><img src="data:${image.mimeType};base64,${image.data}" style="width:100%;border-radius:8px;"></div>` : ''}
-    ${wantsImages && pageImages && pageImages.length ? `<div style="font-size:12px;color:var(--green);margin:4px 0 10px;">✓ ${pageImages.length} fonte(s) visual(is) incorporada(s) à análise e aos arquivos. A geração de capa por IA é opcional e independente.</div>` : ''}
+    ${wantsImages && pageImages && pageImages.length ? `<div style="font-size:12px;color:var(--green);margin:4px 0 10px;">✓ ${pageImages.length} página(s) visual(is) disponíveis; somente as associadas a capítulos serão exportadas. A geração de capa por IA é opcional e independente.</div>` : ''}
     ${pageImages && pageImages.length>0 ? `<div class="card"><h3>Fontes visuais originais — amplie e confira</h3><div style="display:flex;gap:8px;overflow-x:auto;">${pageImages.map(pi=>`<div style="flex-shrink:0;width:150px;"><img src="${pi.dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--border);cursor:pointer;" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-family:var(--mono);font-size:9px;color:var(--dim2);margin-top:3px;">${escapeHtml(pi.docTitle)} · pág. ${pi.page}</div></div>`).join('')}</div></div>` : ''}
     ${(parsed.secoes||[]).map((sec,idx) => `
       <div class="card">
@@ -2195,7 +2197,7 @@ function renderReport(){
         <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;">
           ${(sec.bullets||[]).map(b=>`<li>${escapeHtml(b)}</li>`).join('')}
         </ul>
-        ${pageImages&&pageImages.length?(()=>{const pi=pageImages[idx%pageImages.length];return `<div style="display:grid;grid-template-columns:minmax(130px,240px) 1fr;gap:14px;align-items:center;margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;"><img src="${pi.dataUrl}" alt="Figura da fonte" style="width:100%;max-height:240px;object-fit:contain;background:white;border-radius:5px;cursor:zoom-in" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-size:12px;line-height:1.6"><b>Fonte visual para conferir</b><div>${escapeHtml(pi.docTitle)} · Rev. ${escapeHtml(pi.revision)} · PDF pág. ${pi.page}</div><small>Imagem original; a relação com esta seção exige conferência. Toque para ampliar.</small></div></div>`;})():''}
+        ${pageImages&&pageImages.length?(()=>{const pi=rm55FigureForSection(sec,currentReport);if(!pi)return `<div style="font-size:11px;color:var(--dim);margin-top:10px">Nenhuma figura foi associada com confiança a esta seção. Confira as fontes visuais acima.</div>`;return `<div style="display:grid;grid-template-columns:minmax(130px,240px) 1fr;gap:14px;align-items:center;margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;"><img src="${pi.dataUrl}" alt="Figura da fonte" style="width:100%;max-height:240px;object-fit:contain;background:white;border-radius:5px;cursor:zoom-in" onclick="openImageLightbox('${pi.dataUrl}','${escapeHtml(pi.docTitle)} · pág. ${pi.page}')"><div style="font-size:12px;line-height:1.6"><b>Fonte visual para conferir</b><div>${escapeHtml(pi.docTitle)} · Rev. ${escapeHtml(pi.revision)} · PDF pág. ${pi.page}</div><small>Imagem original; a relação com esta seção exige conferência. Toque para ampliar.</small></div></div>`;})():''}
       </div>`).join('')}
     <div class="card">
       <h3>Fontes</h3>
@@ -2238,7 +2240,45 @@ function rm55FigureForSection(sec,report){
   }
   return score>=2?best:null;
 }
+function rm58NormalizeRevision(rev){return String(rev||'não informada').replace(/^(?:rev(?:isão|ision)?[.\s:]*)+/ig,'').trim()||'não informada';}
+function rm58ReportIssues(report){
+  const sections=report?.parsed?.secoes||[];
+  const body=sections.flatMap(sec=>sec.bullets||[]).join(' ');
+  const issues=[];
+  if(!sections.length)issues.push('O relatório não contém capítulos.');
+  if(sections.some(sec=>!sec.bullets?.length))issues.push('Há capítulos vazios.');
+  if(sections.some(sec=>(sec.bullets||[]).some(b=>/\[F\d+\]|referência não validada|\[object Object\]/i.test(b))))issues.push('Há referências não resolvidas.');
+  if(/\b(?:RDR[- ]?7000|P701|Primus)\b/i.test(report?.topic||'')){
+    const variants=[...new Set((body.match(/4G(?:2331|3441)F00911/g)||[]))];
+    if(variants.length>1)issues.push('Part Numbers divergentes para a configuração P660 Clone: '+variants.join(' e ')+'. Verifique os manuais originais.');
+  }
+  return issues;
+}
+function rm58AllowExport(){
+  const issues=rm58ReportIssues(currentReport);
+  if(issues.length){alert('Exportação bloqueada por inconsistência técnica:\n\n'+issues.join('\n')+'\n\nRevise as fontes e gere novamente o relatório.');return false;}
+  return true;
+}
+function rm58SlideChunks(paragraphs,limit){
+  const chunks=[];let current='';
+  for(const paragraph of paragraphs){
+    const sentences=String(paragraph).match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g)||[String(paragraph)];
+    for(const sentence of sentences){
+      const words=sentence.trim().split(/\s+/);let piece='';
+      for(const word of words){
+        if(piece.length+word.length+1>limit && piece){if(current)chunks.push(current.trim());current='';chunks.push(piece.trim());piece='';}
+        piece+=(piece?' ':'')+word;
+      }
+      if(current.length+piece.length+2>limit && current){chunks.push(current.trim());current='';}
+      current+=(current?' ':'')+piece;
+    }
+    current+='\n\n';
+  }
+  if(current.trim())chunks.push(current.trim());
+  return chunks.length?chunks:['Sem conteúdo'];
+}
 function exportReportPDF(){
+  if(!rm58AllowExport())return;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const pageW = 210, marginL = 15, marginR = 15, maxW = pageW - marginL - marginR;
@@ -2283,7 +2323,7 @@ function exportReportPDF(){
         if(y+h+16>280){doc.addPage();y=20;}
         doc.addImage(pi.dataUrl,marginL,y,w,h);y+=h+5;
         doc.setFontSize(8);doc.setTextColor(95);
-        const caption=doc.splitTextToSize('Fonte visual para conferir: '+pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,maxW);
+        const caption=doc.splitTextToSize('Fonte visual para conferir: '+pi.docTitle+' · Rev. '+rm58NormalizeRevision(pi.revision)+' · PDF pág. '+pi.page,maxW);
         doc.text(caption,marginL,y);y+=caption.length*4+7;doc.setTextColor(0);
       }catch(e){console.warn('Imagem da seção não incorporada',e);}
     }
@@ -2305,6 +2345,7 @@ function exportReportPDF(){
 }
 
 function exportReportPPTX(){
+  if(!rm58AllowExport())return;
   const pptx = new window.PptxGenJS();
   pptx.defineLayout({ name:'AVIATOR', width:10, height:5.63 });
   pptx.layout = 'AVIATOR';
@@ -2319,17 +2360,14 @@ function exportReportPPTX(){
   titleSlide.addText('RotorMind · FOR TRAINING AND STUDY PURPOSES ONLY', { x:0.5, y:3.3, w:9, h:0.5, fontSize:11, color:'8B95A1', align:'center' });
 
   for(const sec of (currentReport.parsed.secoes||[])){
-    const slide = pptx.addSlide();
-    slide.background = { color: '12171C' };
-    slide.addText(sec.heading || '', { x:0.5, y:0.35, w:9, h:0.7, fontSize:22, bold:true, color:'4FA8E0' });
-    const images=currentReport.pageImages||[];
     const pi=rm55FigureForSection(sec,currentReport);
-    const bulletText=(sec.bullets||[]).map(b=>String(b));
-    const slideText=bulletText.join('\n\n');
-    const maxChars=pi?950:1600;
-    slide.addText(slideText.slice(0,maxChars),{x:0.55,y:1.15,w:pi?5.4:8.9,h:4.05,fontSize:pi?10:12,color:'E4E7EA',valign:'top',breakLine:false});
-    if(slideText.length>maxChars){for(let pos=maxChars;pos<slideText.length;pos+=1600){const continuation=pptx.addSlide();continuation.background={color:'12171C'};continuation.addText((sec.heading||'')+' — continuação',{x:0.5,y:0.35,w:9,h:0.7,fontSize:20,bold:true,color:'4FA8E0'});continuation.addText(slideText.slice(pos,pos+1600),{x:0.55,y:1.15,w:8.9,h:4.05,fontSize:12,color:'E4E7EA',valign:'top'});}}
-    if(pi){try{slide.addImage({data:pi.dataUrl,x:6.2,y:1.15,w:3.2,h:3.55,sizing:{type:'contain',w:3.2,h:3.55}});slide.addText(pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,{x:6.2,y:4.78,w:3.2,h:0.45,fontSize:8,color:'9FAEBA'});}catch(e){console.warn('Falha imagem PPTX',e);}}
+    const chunks=rm58SlideChunks((sec.bullets||[]).map(b=>String(b)),pi?700:1050);
+    chunks.forEach((content,i)=>{
+      const slide=pptx.addSlide();slide.background={color:'12171C'};
+      slide.addText((sec.heading||'')+(i?' — continuação '+(i+1):''),{x:0.5,y:0.35,w:9,h:0.7,fontSize:20,bold:true,color:'4FA8E0',breakLine:false});
+      slide.addText(content,{x:0.55,y:1.15,w:pi&&i===0?5.4:8.9,h:4.05,fontSize:pi&&i===0?11:12,color:'E4E7EA',valign:'top',breakLine:false,margin:0.08});
+      if(pi&&i===0){try{slide.addImage({data:pi.dataUrl,x:6.2,y:1.15,w:3.2,h:3.55,sizing:{type:'contain',w:3.2,h:3.55}});slide.addText(pi.docTitle+' · Rev. '+rm58NormalizeRevision(pi.revision)+' · PDF pág. '+pi.page,{x:6.2,y:4.78,w:3.2,h:0.45,fontSize:8,color:'9FAEBA'});}catch(e){console.warn('Falha imagem PPTX',e);}}
+    });
   }
 
   // V5.6: remover slides anexos com páginas completas repetidas.
