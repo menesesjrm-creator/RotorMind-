@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>RotorMind 6.0 — Aviation Intelligence</title>
+<title>RotorMind 6.2 — Pesquisa com Fontes</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" href="./icon-192.png">
@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V6.0 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V6.2 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -243,6 +243,17 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
           </label>
           <div class="dropzone" id="dropzone">Toque para selecionar um PDF, ou arraste aqui<br><span style="font-size:11px;">extração de texto + indexação por página</span></div>
           <input type="file" id="file-input" accept="application/pdf" style="display:none">
+          <div class="card" style="margin-top:14px;padding:14px;border-color:var(--accent-border)">
+            <h3 style="margin:0 0 8px">Biblioteca incremental · Google Drive</h3>
+            <p style="font-size:12px;line-height:1.6;color:var(--dim)">Selecione vários PDFs baixados do Google Drive ou use o seletor de pasta quando disponível. Os arquivos serão processados localmente, um de cada vez. Esta versão <b>não acessa sua conta Google automaticamente</b>.</p>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <button class="btn btn-primary" id="rm62-batch-select" type="button">Adicionar vários PDFs</button>
+              <button class="btn" id="rm62-folder-select" type="button">Selecionar pasta</button>
+            </div>
+            <input id="rm62-batch-input" type="file" accept=".pdf,application/pdf" multiple hidden>
+            <input id="rm62-folder-input" type="file" accept=".pdf,application/pdf" multiple webkitdirectory directory hidden>
+            <div id="rm62-batch-status" style="font-size:12px;color:var(--dim);margin-top:10px" aria-live="polite">Aguardando arquivos.</div>
+          </div>
         </div>
 
         <div class="card">
@@ -1161,7 +1172,8 @@ async function handleFile(file){
   const typedRevision = document.getElementById('f-revision').value.trim();
   const typedDate = document.getElementById('f-date').value;
   const meta = {
-    id: 'doc_' + Date.now(),
+    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    fileSize: file.size,
     title,
     aircraft: document.getElementById('f-aircraft').value,
     category: document.getElementById('f-category').value,
@@ -1211,6 +1223,51 @@ async function handleFile(file){
     }
   }
 }
+
+// RotorMind 6.2: importação incremental de PDFs selecionados pelo usuário.
+// Não acessa Drive nem NotebookLM automaticamente e não transmite PDFs para serviços externos.
+async function rm62ImportBatch(files){
+  const statusEl=document.getElementById('rm62-batch-status');
+  const all=Array.from(files||[]).filter(f=>/\.pdf$/i.test(f.name));
+  if(!all.length){statusEl.textContent='Nenhum PDF selecionado.';return;}
+  const btns=['rm62-batch-select','rm62-folder-select'].map(id=>document.getElementById(id));
+  btns.forEach(b=>b.disabled=true);
+  let imported=0,skipped=0,failed=0;
+  const originalTitle=document.getElementById('f-title').value;
+  const originalRevision=document.getElementById('f-revision').value;
+  const originalCompany=document.getElementById('f-company').value;
+  const originalDate=document.getElementById('f-date').value;
+  try{
+    for(let i=0;i<all.length;i++){
+      const file=all[i];
+      statusEl.textContent=`${i+1}/${all.length}: ${file.name} · importados ${imported}, ignorados ${skipped}, falhas ${failed}`;
+      const index=await getIndex();
+      const title=file.name.replace(/\.pdf$/i,'');
+      if(index.some(d=>d.title.toLowerCase()===title.toLowerCase() && d.fileSize===file.size)){skipped++;continue;}
+      document.getElementById('f-title').value=title;
+      document.getElementById('f-revision').value='';
+      document.getElementById('f-company').value=originalCompany;
+      document.getElementById('f-date').value='';
+      const before=index.length;
+      await handleFile(file);
+      if((await getIndex()).length>before)imported++;else failed++;
+    }
+    statusEl.textContent=`Concluído: ${imported} PDF(s) importado(s), ${skipped} duplicado(s) ignorado(s), ${failed} falha(s). Confira os metadados e revisões antes de usar na pesquisa.`;
+  }catch(e){statusEl.textContent='Importação interrompida: '+(e.message||e);}
+  finally{
+    document.getElementById('f-title').value=originalTitle;
+    document.getElementById('f-revision').value=originalRevision;
+    document.getElementById('f-company').value=originalCompany;
+    document.getElementById('f-date').value=originalDate;
+    btns.forEach(b=>b.disabled=false);
+    document.getElementById('rm62-batch-input').value='';
+    document.getElementById('rm62-folder-input').value='';
+  }
+}
+document.getElementById('rm62-batch-select').addEventListener('click',()=>document.getElementById('rm62-batch-input').click());
+document.getElementById('rm62-folder-select').addEventListener('click',()=>document.getElementById('rm62-folder-input').click());
+document.getElementById('rm62-batch-input').addEventListener('change',e=>rm62ImportBatch(e.target.files));
+document.getElementById('rm62-folder-input').addEventListener('change',e=>rm62ImportBatch(e.target.files));
 
 async function renderDocs(){
   const idx = await getIndex();
@@ -1493,7 +1550,8 @@ function renderDiffResults(body, results, oldMeta, newFile, newChunks){
     const title = oldMeta.title;
     const suggestedRev = await showPrompt('Confirmar: qual o número/rótulo da nova revisão?', '');
     const newMeta = {
-      id: 'doc_' + Date.now(),
+      id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    fileSize: file.size,
       title, aircraft: oldMeta.aircraft, category: oldMeta.category, company: oldMeta.company,
       revision: (suggestedRev && suggestedRev.trim()) || 'N/A',
       revisionDate: new Date().toISOString().slice(0,10),
@@ -1809,6 +1867,7 @@ function rmTopicGate(query){
  const groups=[
   {id:'hydraulic',query:/\b(hidraulic\w*|hydraulic\w*|hydraulics|hyd system|hyd1|hyd2|servoactuator\w*|servoatuador\w*)\b/, evidence:/\b(hydraulic\w*|hidraulic\w*|hydraulics|hyd1|hyd2|hyd system|servoactuator\w*|servoatuador\w*|hyd pump|hyd reservoir|hyd pressure)\b/},
   {id:'radar',query:/\b(radar\w*|rdr[ -]?7000|primus|weather radar)\b/, evidence:/\b(radar\w*|rdr[ -]?7000|primus|weather radar|wx path|wx all|antenna receiver transmitter)\b/},
+  {id:'fuselage',query:/\b(fuselag\w*|fuselage\w*|airframe|estrutura da aeronave|estrutura do helicoptero)\b/, evidence:/\b(fuselag\w*|fuselage\w*|airframe|aircraft structure|structural section|forward fuselage|rear fuselage|tail boom|tailcone|nose section|frame|bulkhead|longeron|skin panel|estrutura primari\w*|estrutura secundari\w*)\b/},
   {id:'fuel',query:/\b(combustivel|fuel system|fuel pump|fuel heater)\b/, evidence:/\b(fuel|combustivel|fuel pump|fuel heater|fuel tank)\b/},
   {id:'electrical',query:/\b(eletric\w*|electrical\w*|generator|gerador\w*|ac bus|dc bus)\b/, evidence:/\b(electrical\w*|eletric\w*|generator|gerador\w*|ac bus|dc bus|alternator)\b/}
  ];
@@ -1951,7 +2010,7 @@ async function generateImageForReport(titulo, topic, aircraft){
 
 async function generateReportFromRequest(rawRequest){
   const { format, aircraft, wantsImages, topic } = parseReportRequest(rawRequest);
-  const hits = await reportRetrieve(topic, aircraft, 12);
+  const hits = (await reportRetrieve(topic, aircraft, 12)).filter(h=>rmEvidenceRelevant(topic,h));
   if(hits.length===0){
     throw new Error('Nenhuma fonte pertinente encontrada. Confira a Biblioteca, a indexação e o filtro de área técnica. Não é necessário importar os PDFs novamente antes de verificar os filtros.');
   }
@@ -1998,7 +2057,7 @@ async function generateReportFromRequest(rawRequest){
     let last;
     const models=(await rmAvailableGeminiModels(apiKey)).slice(0,3);
     for(const attempt of attempts){
-      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Confira cuidadosamente Part Numbers e NÃO atribua o mesmo P/N a equipamentos distintos sem confirmação explícita e inequívoca. Produza ${attempt.bullets} explicações técnicas aprofundadas, cada uma com 100 a 170 palavras: descreva mecanismo, diferenças verificadas entre as duas configurações, consequência prática para o piloto, limites e ressalvas, e cite [F1], [F2] conforme cada fonte. NÃO use informações não contidas nas fontes. Se as fontes não permitirem detalhar, declare a lacuna em vez de inventar. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
+      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nExplique somente o assunto solicitado no Tema e nesta Seção, utilizando exclusivamente as fontes numeradas. Nunca mude para outro sistema técnico. Se o tema for fuselagem, NÃO discuta radares, EFB ou controle administrativo de manuais. Se for comparação de radares, distinga P701, RDR-7000 e suas variantes. Confira Part Numbers e não apresente dados conflitantes como fatos. Produza ${attempt.bullets} explicações técnicas aprofundadas, cada uma com 100 a 170 palavras: descreva mecanismo, diferenças verificadas entre as duas configurações, consequência prática para o piloto, limites e ressalvas, e cite [F1], [F2] conforme cada fonte. NÃO use informações não contidas nas fontes. Se as fontes não permitirem detalhar, declare a lacuna em vez de inventar. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
       for(const model of models){
         try{
           const config={maxOutputTokens:attempt.limit,responseMimeType:'application/json',temperature:0.1,thinkingConfig:{thinkingBudget:0}};
@@ -2019,10 +2078,11 @@ async function generateReportFromRequest(rawRequest){
           const section=obj.secoes?.[0];
           if(!Array.isArray(section?.bullets)||!section.bullets.length)throw new Error('Capítulo sem observações');
           const bullets=section.bullets.map(t=>String(t).replace(/\[F(\d+)\]/g,(m,n)=>{
-            const h=evidence[Number(n)-1];return h?`[${h.doc.title}, Rev. ${h.doc.revision||'não informada'}, PDF pág. ${h.chunk.page}]`:'[referência não validada]';
+            const h=evidence[Number(n)-1];return h?`[${h.doc.title}, Rev. ${rm58NormalizeRevision(h.doc.revision)||'não informada'}, PDF pág. ${h.chunk.page}]`:'[referência não validada]';
           }));
-          if(bullets.some(t=>t.includes('[referência não validada]')))throw new Error('Citação de fonte inexistente');
+          if(bullets.some(t=>t.includes('[referência não validada]')||/\[F\d+\]/.test(t)))throw new Error('Citação de fonte inexistente ou não resolvida');
           if(bullets.some(t=>!t.includes('PDF pág.')))throw new Error('Observação sem fonte verificável');
+          if(rmTopicGate(topic).some(g=>g.id==='fuselage') && bullets.some(t=>/\b(RDR[- ]?7000|P701|Primus 701|vertical buffer|beacon gain)\b/i.test(t)))throw new Error('Contaminação temática: resposta sobre fuselagem contém radar');
           if(bullets.join(' ').length<950)throw new Error('Explicação superficial: conteúdo insuficiente para capítulo técnico');
           return {heading:chapter.name,bullets};
         }catch(e){last=e;
@@ -2037,11 +2097,12 @@ async function generateReportFromRequest(rawRequest){
   const sections=[],chapterErrors=[];
   for(const chapter of chapters){
     const targeted=await reportRetrieve(chapter.query,aircraft,8);
-    const pool=[...targeted,...allEvidence];
+    const pool=targeted.filter(h=>rmEvidenceRelevant(topic,h));
     const unique=[...new Map(pool.map(h=>[h.doc.id+':'+h.chunk.page,h])).values()];
     const p701=unique.filter(h=>/\b(?:P701|Primus[ -]?701|WR[- ]?701)\b/i.test(h.doc.title+' '+h.chunk.text));
     const rdr=unique.filter(h=>/\b(?:RDR[- ]?7000|ART[- ]?7000)\b/i.test(h.doc.title+' '+h.chunk.text));
     const evidence=isRadarComparison?[...p701.slice(0,3),...rdr.filter(h=>!p701.includes(h)).slice(0,3)].slice(0,6):unique.slice(0,6);
+    if(!evidence.length){chapterErrors.push(chapter.name+': sem fontes pertinentes');continue;}
     evidence.forEach(addEvidence);
     try{sections.push(await requestChapter(chapter,evidence));}
     catch(err){
