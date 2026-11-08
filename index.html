@@ -2073,7 +2073,7 @@ async function generateReportFromRequest(rawRequest){
   if(wantsImages){
     const chosen = (typeof rmSelectedFigures !== 'undefined') ? [...rmSelectedFigures.values()].slice(0,8) : [];
     for(const f of chosen){
-      pageImages.push({dataUrl:f.image, docTitle:f.title, revision:f.revision||'não informada', page:f.page, approved:true, context:String(f.context||f.text||'')});
+      pageImages.push({dataUrl:f.image, docTitle:f.title, revision:f.revision||'não informada', page:f.page, approved:true, crop:f.crop||null, context:String(f.context||f.text||'')});
     }
   }
 
@@ -2238,7 +2238,7 @@ function rm55FigureForSection(sec,report){
     if(pi.approved)n+=1;
     if(n>score){best=pi;score=n;}
   }
-  return score>=2?best:null;
+  return score>=2?best:(images.filter(pi=>pi.approved&&pi.crop).length===1?images.find(pi=>pi.approved&&pi.crop):null);
 }
 function rm58NormalizeRevision(rev){return String(rev||'não informada').replace(/^(?:rev(?:isão|ision)?[.\s:]*)+/ig,'').trim()||'não informada';}
 function rm58ReportIssues(report){
@@ -2968,7 +2968,12 @@ document.getElementById('v2-create').addEventListener('click',async()=>{
 .rm-figure-card{background:var(--panel2);border:1px solid var(--border);padding:8px;border-radius:10px;min-width:0}
 .rm-figure-card img{width:100%;height:135px;object-fit:contain;background:#fff;border-radius:5px}
 .rm-figure-card small{display:block;color:var(--dim);overflow-wrap:anywhere;font-size:10px;margin:6px 0}
-.rm-figure-card button{font-size:10px}
+.rm-figure-card button{font-size:10px;margin:2px}
+.rm60-crop-overlay{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:12px}
+.rm60-crop-panel{width:min(100%,960px);max-height:96dvh;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;color:var(--text)}
+.rm60-crop-panel h3{margin:0 0 8px}.rm60-crop-panel p{font-size:12px;color:var(--dim)}
+.rm60-crop-canvas{display:block;max-width:100%;height:auto;margin:12px auto;border:1px solid var(--border);background:white;cursor:crosshair}
+.rm60-crop-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 </style>
 <script>
 const rmSelectedFigures=new Map();
@@ -2978,11 +2983,40 @@ function rmRenderSelectedFigures(){
  if(!rmSelectedFigures.size){const p=document.createElement('p');p.className='rm-muted';p.textContent='Nenhuma imagem selecionada.';target.appendChild(p);return;}
  const grid=document.createElement('div');grid.className='rm-figure-grid';
  for(const [key,f] of rmSelectedFigures){const c=document.createElement('div');c.className='rm-figure-card';const img=document.createElement('img');img.src=f.image;img.alt='Página '+f.page+' do documento '+f.title;
- const label=document.createElement('small');label.textContent=f.title+' · Rev. '+f.revision+' · p. '+f.page;
+ const label=document.createElement('small');label.textContent=f.title+' · Rev. '+f.revision+' · p. '+f.page+(f.crop?' · Recorte '+[f.crop.x,f.crop.y,f.crop.w,f.crop.h].join(','):'');
  const open=document.createElement('button');open.className='btn';open.textContent='Abrir PDF';open.onclick=()=>openPdfViewer(f.docId,f.page);
+ const crop=document.createElement('button');crop.className='btn';crop.textContent='Recortar figura';crop.onclick=()=>rm60OpenCrop(key);
  const remove=document.createElement('button');remove.className='btn';remove.textContent='Remover';remove.onclick=()=>{rmSelectedFigures.delete(key);rmRenderSelectedFigures();};
- c.append(img,label,open,remove);grid.appendChild(c);}
+ c.append(img,label,open,crop,remove);grid.appendChild(c);}
  target.appendChild(grid);
+}
+
+/* RotorMind 6.0: recorte local de páginas PDF, compatível com toque e Apple Pencil.
+   A imagem original fica preservada no registro selecionado; nenhum pixel é enviado a terceiros. */
+function rm60OpenCrop(key){
+ const figure=rmSelectedFigures.get(key);if(!figure)return;
+ const original=figure.originalImage||figure.image;
+ const overlay=document.createElement('div');overlay.className='rm60-crop-overlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');
+ const panel=document.createElement('section');panel.className='rm60-crop-panel';
+ const title=document.createElement('h3');title.textContent='Recortar figura — '+figure.title+' · PDF pág. '+figure.page;
+ const hint=document.createElement('p');hint.textContent='Arraste um retângulo sobre a página com o dedo, mouse ou Apple Pencil. A imagem original será preservada para novos recortes.';
+ const canvas=document.createElement('canvas');canvas.className='rm60-crop-canvas';canvas.style.touchAction='none';
+ const footer=document.createElement('div');footer.className='rm60-crop-actions';
+ const cancel=document.createElement('button');cancel.className='btn';cancel.textContent='Cancelar';
+ const reset=document.createElement('button');reset.className='btn';reset.textContent='Página inteira';
+ const save=document.createElement('button');save.className='btn';save.textContent='Aplicar recorte';save.disabled=true;
+ footer.append(cancel,reset,save);panel.append(title,hint,canvas,footer);overlay.append(panel);document.body.append(overlay);
+ const image=new Image();let selection=null,drag=null,scale=1;
+ const close=()=>overlay.remove();cancel.onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+ image.onload=()=>{const maxW=Math.min(window.innerWidth-60,900);scale=Math.min(1,maxW/image.naturalWidth,Math.max(250,window.innerHeight*.55)/image.naturalHeight);canvas.width=Math.round(image.naturalWidth*scale);canvas.height=Math.round(image.naturalHeight*scale);draw();};
+ image.onerror=()=>{hint.textContent='Não foi possível abrir a página original para recorte.'};image.src=original;
+ function draw(){const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);if(selection){ctx.fillStyle='rgba(0,0,0,.32)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.clearRect(selection.x,selection.y,selection.w,selection.h);ctx.drawImage(image,selection.x/scale,selection.y/scale,selection.w/scale,selection.h/scale,selection.x,selection.y,selection.w,selection.h);ctx.strokeStyle='#38bdf8';ctx.lineWidth=3;ctx.strokeRect(selection.x,selection.y,selection.w,selection.h);}}
+ const point=e=>{const r=canvas.getBoundingClientRect();return {x:Math.max(0,Math.min(canvas.width,(e.clientX-r.left)*canvas.width/r.width)),y:Math.max(0,Math.min(canvas.height,(e.clientY-r.top)*canvas.height/r.height))}};
+ canvas.addEventListener('pointerdown',e=>{if(!image.complete)return;canvas.setPointerCapture(e.pointerId);drag=point(e);selection=null;save.disabled=true;draw()});
+ canvas.addEventListener('pointermove',e=>{if(!drag)return;const p=point(e);selection={x:Math.min(p.x,drag.x),y:Math.min(p.y,drag.y),w:Math.abs(p.x-drag.x),h:Math.abs(p.y-drag.y)};save.disabled=selection.w<12||selection.h<12;draw()});
+ canvas.addEventListener('pointerup',()=>{drag=null});canvas.addEventListener('pointercancel',()=>{drag=null});
+ reset.onclick=()=>{selection=null;save.disabled=true;draw();if(figure.originalImage){figure.image=figure.originalImage;figure.crop=null;rmRenderSelectedFigures();close();}};
+ save.onclick=()=>{if(!selection||selection.w<12||selection.h<12)return;const rect={x:Math.round(selection.x/scale),y:Math.round(selection.y/scale),w:Math.round(selection.w/scale),h:Math.round(selection.h/scale)};const out=document.createElement('canvas');out.width=Math.min(2200,rect.w);out.height=Math.max(1,Math.round(out.width*rect.h/rect.w));out.getContext('2d').drawImage(image,rect.x,rect.y,rect.w,rect.h,0,0,out.width,out.height);figure.originalImage=original;figure.image=out.toDataURL('image/jpeg',.9);figure.crop=rect;figure.context=(figure.context||'')+' figura recortada e aprovada pelo usuário';rmRenderSelectedFigures();close();};
 }
 document.getElementById('rm-clear-figures').addEventListener('click',()=>{rmSelectedFigures.clear();rmRenderSelectedFigures();});
 rmRenderSelectedFigures();

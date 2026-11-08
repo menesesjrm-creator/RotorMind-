@@ -1,1 +1,6 @@
-RotorMind 5.8 Beta — atualização sobre a 5.7. Inclui Estudos/quiz da 5.6; validação de inconsistências de Part Numbers e referências não resolvidas; prévia de imagens sem rodízio arbitrário; PPTX paginado por frases e palavras, sem cortes por índice fixo. Não garante extração automática de recortes de figuras; não foi testado no Safari iPad. Preserve o armazenamento local.
+RotorMind 6.0 Beta — recorte local de figuras selecionadas no iPad.
+
+Esta é uma evolução incremental sobre o código 5.8, NÃO a migração completa para React.
+Na Consulta, selecione uma página visual e use Recortar figura; arraste o retângulo e aplique. Gere o relatório após selecionar o recorte.
+Antes de atualizar o site, exporte o backup na Biblioteca/Configurações e preserve a origem do site para manter o IndexedDB.
+Não foram realizados testes reais em Safari iPad ou Gemini.
