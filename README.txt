@@ -1,4 +1,1 @@
-RotorMind 5.5 Beta
-Correções: título sem repetição; figuras associadas ao assunto da seção; remoção de anexos de páginas completas duplicadas no PDF e PPTX.
-Limites: não há recorte automático validado de figuras nem testes no Safari do iPad.
-Para atualizar GitHub Pages, substitua index.html e mantenha seus arquivos PWA existentes. Faça backup da biblioteca local antes de alterações de armazenamento.
+RotorMind 5.7 — instalação: publique TODOS os arquivos na raiz do repositório GitHub Pages (não o ZIP). Esta versão preserva IndexedDB local. Corrige arquivos PWA ausentes em 5.6, exige capítulos mais explicativos e com citações, e evita truncar texto no PPTX dividindo em slides. Geração requer modelo Gemini válido e consentimento para enviar trechos dos manuais; não use com manuais confidenciais sem autorização. Não testado em Safari/iPad real. Não apague dados do Safari antes de exportar backup.

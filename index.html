@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>RotorMind 4.7 — Aviation Intelligence</title>
+<title>RotorMind 5.7 — Aviation Intelligence</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" href="./icon-192.png">
@@ -182,7 +182,7 @@ nav{justify-content:space-around;padding:0 8px}nav button{flex:1;max-width:210px
       <div class="brand-mark">R</div>
       <div>
         <div class="brand-text">RotorMind</div>
-        <div class="brand-sub">AVIATION INTELLIGENCE · V5.5 BETA</div>
+        <div class="brand-sub">AVIATION INTELLIGENCE · V5.7 BETA</div>
       </div>
     </div>
     <button class="rm-settings" type="button" onclick="rmOpen('settings')" aria-label="Abrir ajustes" title="Ajustes">⚙</button>
@@ -1991,14 +1991,14 @@ async function generateReportFromRequest(rawRequest){
   async function requestChapter(chapter, evidence){
     // Pedidos pequenos evitam respostas cortadas: a v4.8 enviava até 12.000
     // caracteres de fontes por capítulo e pedia JSON com 6 bullets extensos.
-    const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,650)}`).join('\n\n');
+    const citations=evidence.map((h,i)=>`[F${i+1}] ${h.doc.title} | Rev. ${h.doc.revision||'não informada'} | PDF pág. ${h.chunk.page}\n${String(h.chunk.text||'').slice(0,1100)}`).join('\n\n');
     // 5.0: não consumir o orçamento de saída com raciocínio interno do modelo.
     // O fallback usa um esquema mínimo, uma seção por chamada, com diagnóstico real.
-    const attempts=[{bullets:3,limit:2048},{bullets:2,limit:2048},{bullets:1,limit:2048}];
+    const attempts=[{bullets:4,limit:4096},{bullets:3,limit:4096}];
     let last;
-    const models=(await rmAvailableGeminiModels(apiKey)).slice(0,5);
+    const models=(await rmAvailableGeminiModels(apiKey)).slice(0,3);
     for(const attempt of attempts){
-      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Produza ${attempt.bullets} observações técnicas concisas com referência [F1], [F2] etc em cada uma. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
+      const prompt=`Tema: ${topic}\nSeção: ${chapter.name}\nCompare com precisão P701 e RDR-7000 usando exclusivamente as fontes numeradas. Se não houver evidência de algum lado, diga isso. RDR-7000 é um radar, nunca massa. Não confunda modo P660 Clone/Real Beam com Vertical Buffer. Confira cuidadosamente Part Numbers e NÃO atribua o mesmo P/N a equipamentos distintos sem confirmação explícita e inequívoca. Produza ${attempt.bullets} explicações técnicas aprofundadas, cada uma com 100 a 170 palavras: descreva mecanismo, diferenças verificadas entre as duas configurações, consequência prática para o piloto, limites e ressalvas, e cite [F1], [F2] conforme cada fonte. NÃO use informações não contidas nas fontes. Se as fontes não permitirem detalhar, declare a lacuna em vez de inventar. Responda exclusivamente JSON: {"secoes":[{"heading":"${chapter.name}","bullets":["observação [F1]"]}]}. FONTES:\n${citations}`;
       for(const model of models){
         try{
           const config={maxOutputTokens:attempt.limit,responseMimeType:'application/json',temperature:0.1,thinkingConfig:{thinkingBudget:0}};
@@ -2022,6 +2022,8 @@ async function generateReportFromRequest(rawRequest){
             const h=evidence[Number(n)-1];return h?`[${h.doc.title}, Rev. ${h.doc.revision||'não informada'}, PDF pág. ${h.chunk.page}]`:'[referência não validada]';
           }));
           if(bullets.some(t=>t.includes('[referência não validada]')))throw new Error('Citação de fonte inexistente');
+          if(bullets.some(t=>!t.includes('PDF pág.')))throw new Error('Observação sem fonte verificável');
+          if(bullets.join(' ').length<950)throw new Error('Explicação superficial: conteúdo insuficiente para capítulo técnico');
           return {heading:chapter.name,bullets};
         }catch(e){last=e;
           if(e.status===401||e.status===403||e.status===429)throw e;
@@ -2039,7 +2041,7 @@ async function generateReportFromRequest(rawRequest){
     const unique=[...new Map(pool.map(h=>[h.doc.id+':'+h.chunk.page,h])).values()];
     const p701=unique.filter(h=>/\b(?:P701|Primus[ -]?701|WR[- ]?701)\b/i.test(h.doc.title+' '+h.chunk.text));
     const rdr=unique.filter(h=>/\b(?:RDR[- ]?7000|ART[- ]?7000)\b/i.test(h.doc.title+' '+h.chunk.text));
-    const evidence=isRadarComparison?[...p701.slice(0,2),...rdr.filter(h=>!p701.includes(h)).slice(0,2)].slice(0,4):unique.slice(0,4);
+    const evidence=isRadarComparison?[...p701.slice(0,3),...rdr.filter(h=>!p701.includes(h)).slice(0,3)].slice(0,6):unique.slice(0,6);
     evidence.forEach(addEvidence);
     try{sections.push(await requestChapter(chapter,evidence));}
     catch(err){
@@ -2055,7 +2057,7 @@ async function generateReportFromRequest(rawRequest){
   if(chapterErrors.length)parsed.secoes.push({heading:'Transparência da geração',bullets:chapterErrors.map(x=>'Não concluído: '+x)});
   // Impedir a exportação enganosa de um documento apresentado como completo.
   if(chapterErrors.length){
-    throw new Error('Comparação incompleta: '+chapterErrors.length+' de '+chapters.length+' capítulos falharam. Nenhum PDF parcial foi salvo. '+chapterErrors.map(x=>x.slice(0,90)).join(' | '));
+    throw new Error('Relatório não concluído (sem exportação parcial): '+chapterErrors.length+' de '+chapters.length+' capítulos falharam. Nenhum PDF parcial foi salvo. '+chapterErrors.map(x=>x.slice(0,90)).join(' | '));
   }
   // Incluir na bibliografia todas as fontes realmente pesquisadas por capítulo.
   hits.splice(0,hits.length,...allEvidence.slice(0,32));
@@ -2216,7 +2218,7 @@ function renderReport(){
   // Prévia integrada: não navegar para a Consulta nem ocultar o formulário.
 }
 
-// V5.5 — figuras somente quando vinculadas ao conteúdo; sem rodízio cego.
+// V5.6 — figuras somente quando vinculadas ao conteúdo; sem rodízio cego.
 function rm55CleanTitle(title){
   let t=String(title||'Resumo').trim();
   t=t.replace(/^(?:(?:comparação|comparacao|estudo|resumo)\s+t[eé]cnic[oa]\s*:\s*){2,}/i,'Comparação técnica: ');
@@ -2260,7 +2262,9 @@ function exportReportPDF(){
   for(const sec of (currentReport.parsed.secoes||[])){
     if(y>270){ doc.addPage(); y=20; }
     doc.setFontSize(13); doc.setFont(undefined,'bold');
-    doc.text(doc.splitTextToSize(sec.heading||'', maxW), marginL, y); y += 8;
+    const headingLines=doc.splitTextToSize(sec.heading||'', maxW);
+    if(y+headingLines.length*7>272){doc.addPage();y=20;}
+    doc.text(headingLines, marginL, y); y += headingLines.length*7+4;
     doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
     for(const b of (sec.bullets||[])){
       const lines = doc.splitTextToSize('• ' + b, maxW - 3);
@@ -2285,7 +2289,7 @@ function exportReportPDF(){
     }
   }
 
-  // V5.5: não anexar automaticamente páginas inteiras duplicadas.
+  // V5.6: não anexar automaticamente páginas inteiras duplicadas.
   // As figuras relevantes aparecem somente nas seções correspondentes.
 
   if(y>255){ doc.addPage(); y=20; }
@@ -2320,12 +2324,15 @@ function exportReportPPTX(){
     slide.addText(sec.heading || '', { x:0.5, y:0.35, w:9, h:0.7, fontSize:22, bold:true, color:'4FA8E0' });
     const images=currentReport.pageImages||[];
     const pi=rm55FigureForSection(sec,currentReport);
-    const bulletText=(sec.bullets||[]).map(b=>({text:b.slice(0,340),options:{bullet:true,breakLine:true}}));
-    slide.addText(bulletText,{x:0.55,y:1.15,w:pi?5.4:8.9,h:4.05,fontSize:pi?11:13,color:'E4E7EA',valign:'top',breakLine:false});
+    const bulletText=(sec.bullets||[]).map(b=>String(b));
+    const slideText=bulletText.join('\n\n');
+    const maxChars=pi?950:1600;
+    slide.addText(slideText.slice(0,maxChars),{x:0.55,y:1.15,w:pi?5.4:8.9,h:4.05,fontSize:pi?10:12,color:'E4E7EA',valign:'top',breakLine:false});
+    if(slideText.length>maxChars){for(let pos=maxChars;pos<slideText.length;pos+=1600){const continuation=pptx.addSlide();continuation.background={color:'12171C'};continuation.addText((sec.heading||'')+' — continuação',{x:0.5,y:0.35,w:9,h:0.7,fontSize:20,bold:true,color:'4FA8E0'});continuation.addText(slideText.slice(pos,pos+1600),{x:0.55,y:1.15,w:8.9,h:4.05,fontSize:12,color:'E4E7EA',valign:'top'});}}
     if(pi){try{slide.addImage({data:pi.dataUrl,x:6.2,y:1.15,w:3.2,h:3.55,sizing:{type:'contain',w:3.2,h:3.55}});slide.addText(pi.docTitle+' · Rev. '+pi.revision+' · PDF pág. '+pi.page,{x:6.2,y:4.78,w:3.2,h:0.45,fontSize:8,color:'9FAEBA'});}catch(e){console.warn('Falha imagem PPTX',e);}}
   }
 
-  // V5.5: remover slides anexos com páginas completas repetidas.
+  // V5.6: remover slides anexos com páginas completas repetidas.
 
   const srcSet = [...new Map(currentReport.hits.map(h => [h.doc.title+'|'+h.doc.revision+'|'+h.chunk.page, h])).values()];
   for(let i=0;i<srcSet.length;i+=9){
@@ -2665,7 +2672,7 @@ ${contextBlock}` + await englishCoachClause();
       if(isLocal && hits.length){
         const safeHits = hits.slice(0,6);
         const citations = safeHits.map(h => `<span class="src-link" data-doc="${h.doc.id}" data-page="${h.chunk.page}">${escapeHtml(h.doc.title)} · ${escapeHtml(h.doc.revision)} · pág. ${h.chunk.page}</span>`).join('<br>');
-        const excerpts = safeHits.map((h,i)=>`**Fonte ${i+1} — ${String(h.doc.title).replace(/[<>]/g,'')}, pág. ${h.chunk.page}:**\n${String(h.chunk.text||'').slice(0,650)}`).join('\n\n');
+        const excerpts = safeHits.map((h,i)=>`**Fonte ${i+1} — ${String(h.doc.title).replace(/[<>]/g,'')}, pág. ${h.chunk.page}:**\n${String(h.chunk.text||'').slice(0,1100)}`).join('\n\n');
         const fallback = addBubble('assistant', '⚠️ O modelo local não conseguiu gerar uma explicação. Abaixo estão **trechos encontrados diretamente na biblioteca local**, sem interpretação da IA. Confira a página original antes de usar informações operacionais.\n\n'+excerpts, '<div class="src-title">📚 FONTES LOCAIS</div>'+citations);
         wireSourceClicks(fallback);
         appendPageImages(fallback, safeHits, false);
@@ -3033,6 +3040,38 @@ window.addEventListener('DOMContentLoaded',()=>{
  b?.addEventListener('click',check);check();
 })();
 
+
+/* 5.6 — atividades didáticas e quiz local; não substitui instruções aprovadas. */
+const RM_QUIZ_KEY='rm-study-quiz-v56';
+const RM_MCDU_QUESTIONS=[
+ {q:'Qual é a função geral do MCDU?',a:['Controlar mecanicamente o rotor principal','Permitir a interação com funções de gerenciamento de voo e navegação','Substituir os instrumentos de voo'],ok:1,why:'O MCDU é uma interface de entrada e consulta de dados de sistemas de gerenciamento de voo. Funções exatas dependem da instalação.'},
+ {q:'Antes de inserir uma coordenada em um plano, o que deve ser conferido?',a:['Formato exigido, referência geográfica e procedimento aprovado','Apenas a quantidade de caracteres','Somente a cor da tela'],ok:0,why:'A sintaxe e a referência de coordenadas devem ser conferidas no manual aplicável. Uma coordenada sintaticamente aceita ainda pode estar errada.'},
+ {q:'Após editar um plano de voo, qual prática é adequada?',a:['Assumir que a rota está correta','Conferir a rota, os pontos e as indicações relevantes antes de utilizá-la','Desligar todas as indicações de navegação'],ok:1,why:'A verificação cruzada de rota, sequência e dados inseridos é essencial. Siga os procedimentos aprovados para a aeronave.'},
+ {q:'Se o MCDU apresentar um aviso de entrada inválida, qual é o caminho adequado?',a:['Ignorar e prosseguir','Inserir dados aleatórios até aceitar','Verificar formato, campo e instruções do manual'],ok:2,why:'Mensagens e formatos variam por versão. Consulte a documentação da instalação.'},
+ {q:'Uma aula genérica sobre MCDU pode definir teclas e sequências específicas do AW139?',a:['Sim, sem consultar o manual','Não; é preciso verificar o equipamento e a versão instalados','Sim, pois todos os MCDUs são idênticos'],ok:1,why:'O conteúdo específico deve ser baseado no manual e na configuração aplicável, não em suposições.'}
+];
+function rmStudyLesson(manual,objective){
+ const mcdu=/\bMCDU\b|\bFMS\b|flight management/i.test(objective+' '+manual);
+ const intro=mcdu?`<h3>MCDU — aula introdutória</h3><p><b>O que é:</b> interface de controle e apresentação de dados do sistema de gerenciamento de voo. Ela permite acessar páginas, consultar informações e introduzir dados de acordo com a configuração instalada.</p><p><b>Como estudar:</b> (1) identificar as áreas da interface; (2) localizar no manual as páginas de plano de voo e navegação; (3) compreender como selecionar campos e verificar entradas; (4) revisar o plano e os avisos antes de utilizá-lo.</p><p><b>Exercício guiado:</b> abra o manual aplicável e identifique uma página de plano de voo. Anote o nome da página, os campos exibidos, o formato de coordenadas aceito e como o manual orienta a conferir a inserção. Não use uma sequência de teclas presumida.</p><p style="color:var(--dim)">Esta é uma introdução conceitual, não uma instrução específica de operação do AW139. Para ensinar teclas, telas e procedimentos reais, é necessário fundamentar a aula no manual da instalação.</p>`:`<h3>Roteiro orientado</h3><p>1. Localize a seção pertinente do manual na Biblioteca.</p><p>2. Identifique conceito, componentes, limites e aplicação operacional.</p><p>3. Registre um exemplo prático e a página que o sustenta.</p><p>4. Explique com suas palavras o que aprendeu e o que ainda precisa verificar.</p><p style="color:var(--dim)">Ainda não há um quiz específico validado para este tema. O registro de tempo não comprova domínio do assunto.</p>`;
+ const quiz=mcdu?`<div class="card" style="margin-top:12px"><h3>Quiz MCDU — 5 questões</h3><p style="color:var(--dim)">Questões conceituais, sem reproduzir procedimentos não verificados.</p><div id="rm-quiz-questions">${RM_MCDU_QUESTIONS.map((x,i)=>`<fieldset style="border:1px solid var(--border);border-radius:9px;padding:10px;margin:10px 0"><legend>${i+1}. ${escapeHtml(x.q)}</legend>${x.a.map((a,j)=>`<label style="display:block;margin:8px 0"><input type="radio" name="rm-q-${i}" value="${j}"> ${escapeHtml(a)}</label>`).join('')}</fieldset>`).join('')}</div><button class="btn" type="button" id="rm-quiz-grade">Corrigir quiz e salvar resultado</button><div id="rm-quiz-result" aria-live="polite" style="margin-top:12px"></div></div>`:'';
+ return `<div class="card"><b>Atividade — ${escapeHtml(manual)}</b><p>Objetivo: ${escapeHtml(objective||'Revisão livre')}</p>${intro}<p style="color:var(--dim)">O tempo é uma meta flexível; a aula e o quiz permanecem na aba Estudos.</p></div>${quiz}`;
+}
+function rmBindStudyQuiz(guide){
+ const btn=guide.querySelector('#rm-quiz-grade');if(!btn)return;
+ btn.addEventListener('click',async()=>{
+  let correct=0;let answered=0;const feedback=[];
+  RM_MCDU_QUESTIONS.forEach((q,i)=>{
+   const checked=guide.querySelector(`input[name="rm-q-${i}"]:checked`);
+   if(checked){answered++;if(Number(checked.value)===q.ok)correct++;}
+   feedback.push(`<p><b>${i+1}. ${checked&&Number(checked.value)===q.ok?'✓ Correto':'Revisar'}</b> — ${escapeHtml(q.why)}</p>`);
+  });
+  const result=guide.querySelector('#rm-quiz-result');
+  result.innerHTML=`<strong>Resultado: ${correct}/5 · ${answered}/5 respondidas</strong>${feedback.join('')}`;
+  if(answered!==5){result.insertAdjacentHTML('afterbegin','<p>Responda às cinco questões para registrar a avaliação.</p>');return;}
+  try{const history=(await kvGet(RM_QUIZ_KEY))||[];history.push({topic:'MCDU',score:correct,total:5,at:new Date().toISOString()});await kvSet(RM_QUIZ_KEY,history.slice(-300));result.insertAdjacentHTML('beforeend','<p>✓ Resultado salvo localmente.</p>');}catch(err){result.insertAdjacentHTML('beforeend','<p>Não foi possível salvar o resultado: '+escapeHtml(String(err.message||err))+'</p>');}
+ });
+}
+
 /* RotorMind 5.3: independent study workspace. Existing study-log and chat are untouched. */
 const RM_SESSIONS_KEY='rm-study-sessions-v53';
 let rmActiveStudy=null;
@@ -3062,7 +3101,7 @@ async function rmRenderStudySessions(){
   const objective=document.getElementById('rm-study-objective').value.trim();
   rmActiveStudy={manual,duration,objective,startedMs:Date.now()};buttons(true);rmStudyStatus();
   const guide=document.getElementById('rm-study-guidance');
-  guide.innerHTML=`<div class="card"><b>Roteiro de estudo — ${escapeHtml(manual)}</b><p>1. Localize o capítulo relevante no manual da Biblioteca.<br>2. Identifique conceitos, limitações e procedimentos importantes.<br>3. Anote dúvidas e compare as referências diretamente nas fontes.<br>4. Ao terminar, registre a sessão. A duração é uma meta, não uma comprovação de leitura.</p><p style="color:var(--dim);font-size:12px">Objetivo: ${escapeHtml(objective||'Revisão livre')}. Este roteiro não substitui o manual nem altera sua Consulta.</p></div>`;
+  guide.innerHTML=rmStudyLesson(manual,objective);rmBindStudyQuiz(guide);
  });
  finish.addEventListener('click',async()=>{
   if(!rmActiveStudy)return;
